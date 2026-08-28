@@ -164,63 +164,6 @@ class ConnectionManager:
 manager = ConnectionManager()
 GLOBAL_LOOP = None
 
-# ── 更新源配置（从 data/update_config.json 读取）────────────────────────
-UPDATE_CONFIG_PATH = os.path.join(BASE_DIR, "data", "update_config.json")
-UPDATE_CONFIG_DEFAULTS = {
-    "repo_url": "",
-    "version_url": "",
-    "raw_root": "",
-    "tree_url": "",
-    "update_notes_url": "",
-}
-
-def load_update_config():
-    """从 data/update_config.json 加载更新源配置，文件不存在则返回空配置。"""
-    if not os.path.exists(UPDATE_CONFIG_PATH):
-        return dict(UPDATE_CONFIG_DEFAULTS)
-    try:
-        with open(UPDATE_CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        result = dict(UPDATE_CONFIG_DEFAULTS)
-        result.update({k: str(v or "") for k, v in cfg.items() if k in UPDATE_CONFIG_DEFAULTS})
-        return result
-    except Exception:
-        return dict(UPDATE_CONFIG_DEFAULTS)
-
-_update_config_cache = None
-_update_config_mtime = 0
-
-def get_update_config():
-    """获取更新源配置（带文件修改时间缓存，避免每次调用都读磁盘）。"""
-    global _update_config_cache, _update_config_mtime
-    try:
-        mtime = os.path.getmtime(UPDATE_CONFIG_PATH) if os.path.exists(UPDATE_CONFIG_PATH) else 0
-    except OSError:
-        mtime = 0
-    if _update_config_cache is None or mtime != _update_config_mtime:
-        _update_config_cache = load_update_config()
-        _update_config_mtime = mtime
-    return _update_config_cache
-
-def get_github_urls():
-    """从配置中提取 GitHub 仓库相关 URL。"""
-    cfg = get_update_config()
-    return {
-        "repo_url": cfg.get("repo_url", ""),
-        "version_url": cfg.get("version_url", ""),
-        "raw_root": cfg.get("raw_root", ""),
-        "tree_url": cfg.get("tree_url", ""),
-        "update_notes_url": cfg.get("update_notes_url", ""),
-    }
-
-# 模块级变量，从配置文件读取。配置文件不存在时返回空字符串，不影响启动。
-_gh_urls = get_github_urls()
-GITHUB_REPO_URL = _gh_urls["repo_url"]
-GITHUB_VERSION_URL = _gh_urls["version_url"]
-GITHUB_TREE_URL = _gh_urls["tree_url"]
-GITHUB_RAW_ROOT = _gh_urls["raw_root"]
-GITHUB_UPDATE_NOTES_URL = _gh_urls["update_notes_url"]
-
 @app.on_event("startup")
 async def startup_event():
     global GLOBAL_LOOP
@@ -289,8 +232,67 @@ API_PROVIDERS_FILE = os.path.join(DATA_DIR, "api_providers.json")
 RUNNINGHUB_WORKFLOW_STORE_FILE = os.path.join(DATA_DIR, "runninghub_workflows.json")
 SHARED_FOLDERS_FILE = os.path.join(DATA_DIR, "shared_folders.json")
 GLOBAL_CONFIG_FILE = os.path.join(BASE_DIR, "global_config.json")
+
+# ── 更新源配置（从 data/update_config.json 读取）────────────────────────
+UPDATE_CONFIG_PATH = os.path.join(DATA_DIR, "update_config.json")
+UPDATE_CONFIG_DEFAULTS = {
+    "repo_url": "",
+    "version_url": "",
+    "raw_root": "",
+    "tree_url": "",
+    "update_notes_url": "",
+}
+
+def load_update_config():
+    """从 data/update_config.json 加载更新源配置，文件不存在则返回空配置。"""
+    if not os.path.exists(UPDATE_CONFIG_PATH):
+        return dict(UPDATE_CONFIG_DEFAULTS)
+    try:
+        with open(UPDATE_CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        result = dict(UPDATE_CONFIG_DEFAULTS)
+        result.update({k: str(v or "") for k, v in cfg.items() if k in UPDATE_CONFIG_DEFAULTS})
+        return result
+    except Exception:
+        return dict(UPDATE_CONFIG_DEFAULTS)
+
+_update_config_cache = None
+_update_config_mtime = 0
+
 # LLM 技能包目录：默认 BASE_DIR/skills 下每个含 SKILL.md 的子目录视为一个技能；
 # 可用环境变量 WUCANVAS_SKILL_DIRS（分号分隔）追加额外技能根目录。
+
+
+def get_update_config():
+    """获取更新源配置（带文件修改时间缓存，避免每次调用都读磁盘）。"""
+    global _update_config_cache, _update_config_mtime
+    try:
+        mtime = os.path.getmtime(UPDATE_CONFIG_PATH) if os.path.exists(UPDATE_CONFIG_PATH) else 0
+    except OSError:
+        mtime = 0
+    if _update_config_cache is None or mtime != _update_config_mtime:
+        _update_config_cache = load_update_config()
+        _update_config_mtime = mtime
+    return _update_config_cache
+
+def get_github_urls():
+    """从配置中提取 GitHub 仓库相关 URL。"""
+    cfg = get_update_config()
+    return {
+        "repo_url": cfg.get("repo_url", ""),
+        "version_url": cfg.get("version_url", ""),
+        "raw_root": cfg.get("raw_root", ""),
+        "tree_url": cfg.get("tree_url", ""),
+        "update_notes_url": cfg.get("update_notes_url", ""),
+    }
+
+# 模块级变量，从配置文件读取。配置文件不存在时返回空字符串，不影响启动。
+_gh_urls = get_github_urls()
+GITHUB_REPO_URL = _gh_urls["repo_url"]
+GITHUB_VERSION_URL = _gh_urls["version_url"]
+GITHUB_RAW_ROOT = _gh_urls["raw_root"]
+GITHUB_TREE_URL = _gh_urls["tree_url"]
+GITHUB_UPDATE_NOTES_URL = _gh_urls["update_notes_url"]
 SKILLS_DIR = os.path.join(BASE_DIR, "skills")
 CANVAS_TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 LOCAL_IMAGE_IMPORT_MAX_BYTES = int(os.getenv("LOCAL_IMAGE_IMPORT_MAX_BYTES", str(50 * 1024 * 1024)))
@@ -1957,7 +1959,7 @@ def update_connectivity():
         item["required"] = required
         results.append(item)
     sources = {}
-    for source in ("github", "modelscope"):
+    for source in ("github",):
         source_required = [item for item in results if item.get("source") == source and item.get("required")]
         sources[source] = {
             "ok": all(item["ok"] for item in source_required),
@@ -1968,7 +1970,7 @@ def update_connectivity():
         "results": results,
         "sources": sources,
         "required": sources["github"]["required"],
-        "optional": ["GitHub 主页", "ModelScope 空间页面", "ModelScope 主页", "Google 连通性"],
+        "optional": ["GitHub 主页", "Google 连通性"],
     }
 
 def fetch_remote_version(url: str, timeout: float = 5.0) -> Dict[str, Any]:
