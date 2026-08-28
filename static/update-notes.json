@@ -1,10 +1,10 @@
 {
-  "version": "1.1.14",
-  "updated_at": "2026-08-28 20:20",
+  "version": "1.1.15",
+  "updated_at": "2026-08-28 20:30",
   "items": [
     {
       "type": "fix",
-      "text": "修复 run.bat 换行符和编码问题，确保在 Windows cmd.exe 下正常执行。"
+      "text": "关闭 ComfyUI WS 进度监听功能，不再显示断线重连日志。生成进度仍通过轮询获取，不受影响。"
     }
   ]
 }

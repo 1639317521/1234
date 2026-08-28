@@ -197,11 +197,11 @@ async def startup_event():
     GLOBAL_LOOP = asyncio.get_running_loop()
     # 自动探测本地代理（Clash / 其他常见代理）
     _auto_detect_proxy()
-    # 启动云端 ComfyUI WS 进度监听（连接失败自动重试，不影响轮询兜底）
-    try:
-        start_comfy_ws_listeners()
-    except Exception as exc:
-        print(f"ComfyUI WS 监听启动失败: {exc}")
+    # 启动云端 ComfyUI WS 进度监听（已关闭）
+    # try:
+    #     start_comfy_ws_listeners()
+    # except Exception as exc:
+    #     print(f"ComfyUI WS 监听启动失败: {exc}")
     # 启动时整理资产库：给所有图片分组（含默认角色/场景）建好文件夹，并把根目录里的旧素材归整进去。
     try:
         await asyncio.to_thread(migrate_asset_library_into_dirs)
