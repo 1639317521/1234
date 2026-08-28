@@ -694,7 +694,7 @@
             transition: max-height .28s var(--fluid-ease), opacity .18s ease;
         }
         .settings-fold-group:not(.is-collapsed) {
-            max-height: 200px;
+            max-height: 260px;
             opacity: 1;
             pointer-events: auto;
         }
@@ -1637,6 +1637,14 @@
                             <line x1="6" y1="18" x2="6.01" y2="18"></line>
                         </svg>
                         <span class="side-pill-text" data-i18n="port.title">端口设置</span>
+                    </button>
+                    <button class="side-pill" onclick="toggleWsListener()" id="ws-listener-toggle-btn" type="button" title="WS 进度监听">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14"></path>
+                            <path d="M12 5l7 7-7 7"></path>
+                        </svg>
+                        <span class="side-pill-text">WS 监听</span>
+                        <span id="ws-listener-status" class="toggle-badge" style="margin-left:auto;font-size:11px;font-weight:600;color:var(--side-pill);background:var(--danger);padding:0 6px;border-radius:4px;line-height:18px;">关</span>
                     </button>
                 </div>
                 
@@ -2868,6 +2876,42 @@
                 alert('保存失败：' + e.message);
             }
         }
+        async function toggleWsListener() {
+            const statusEl = document.getElementById('ws-listener-status');
+            if(!statusEl) return;
+            const currentEnabled = statusEl.textContent === '开';
+            const newEnabled = !currentEnabled;
+            try {
+                const res = await fetch('/api/ws-listener-config', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({enabled: newEnabled})
+                });
+                const data = await res.json();
+                if(data.ok) {
+                    statusEl.textContent = data.enabled ? '开' : '关';
+                    statusEl.style.background = data.enabled ? 'var(--success,#28a745)' : 'var(--danger)';
+                    if(data.enabled) {
+                        alert('已开启 WS 监听，重启服务后生效。');
+                    } else {
+                        alert('已关闭 WS 监听，重启服务后生效。');
+                    }
+                }
+            } catch(e) {
+                alert('操作失败：' + e.message);
+            }
+        }
+        async function loadWsListenerStatus() {
+            try {
+                const data = await fetch('/api/ws-listener-config').then(r => r.json());
+                const statusEl = document.getElementById('ws-listener-status');
+                if(statusEl) {
+                    statusEl.textContent = data.enabled ? '开' : '关';
+                    statusEl.style.background = data.enabled ? 'var(--success,#28a745)' : 'var(--danger)';
+                }
+            } catch(e) {}
+        }
+        document.addEventListener('DOMContentLoaded', loadWsListenerStatus);
     </script>
 </body>
 

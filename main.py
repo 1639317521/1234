@@ -197,11 +197,12 @@ async def startup_event():
     GLOBAL_LOOP = asyncio.get_running_loop()
     # 自动探测本地代理（Clash / 其他常见代理）
     _auto_detect_proxy()
-    # 启动云端 ComfyUI WS 进度监听（已关闭）
-    # try:
-    #     start_comfy_ws_listeners()
-    # except Exception as exc:
-    #     print(f"ComfyUI WS 监听启动失败: {exc}")
+    # 启动云端 ComfyUI WS 进度监听（默认关闭，可在设置中开启）
+    if _load_ws_listener_config():
+        try:
+            start_comfy_ws_listeners()
+        except Exception as exc:
+            print(f"ComfyUI WS 监听启动失败: {exc}")
     # 启动时整理资产库：给所有图片分组（含默认角色/场景）建好文件夹，并把根目录里的旧素材归整进去。
     try:
         await asyncio.to_thread(migrate_asset_library_into_dirs)
@@ -13956,6 +13957,32 @@ async def set_port_config(req: dict):
     with open(PORT_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump({"port": str(p)}, f, ensure_ascii=False)
     return {"ok": True, "port": str(p), "needs_restart": True}
+
+WS_LISTENER_CONFIG_PATH = os.path.join(DATA_DIR, "ws_listener_config.json")
+
+def _load_ws_listener_config():
+    """读取 WS 监听配置，默认关闭"""
+    try:
+        if os.path.exists(WS_LISTENER_CONFIG_PATH):
+            with open(WS_LISTENER_CONFIG_PATH, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            return bool(cfg.get("enabled", False))
+    except Exception:
+        pass
+    return False
+
+@app.get("/api/ws-listener-config")
+async def get_ws_listener_config():
+    enabled = _load_ws_listener_config()
+    return {"enabled": enabled}
+
+@app.post("/api/ws-listener-config")
+async def set_ws_listener_config(req: dict):
+    enabled = bool(req.get("enabled", False))
+    os.makedirs(os.path.dirname(WS_LISTENER_CONFIG_PATH), exist_ok=True)
+    with open(WS_LISTENER_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({"enabled": enabled}, f, ensure_ascii=False)
+    return {"ok": True, "enabled": enabled, "needs_restart": True}
 
 @app.get("/api/models")
 async def ai_models():
