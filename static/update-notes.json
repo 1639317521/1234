@@ -1,10 +1,14 @@
 {
-  "version": "1.1.10",
+  "version": "1.1.11",
   "updated_at": "2026-08-28 19:20",
   "items": [
     {
       "type": "fix",
       "text": "修复视频节点双击：改为打开预览弹窗（而非内联播放），并在弹窗中正确加载视频播放器。"
+    },
+    {
+      "type": "fix",
+      "text": "修复更多设置折叠组 max-height 过小，端口设置按钮被 overflow:hidden 裁掉。"
     },
     {
       "type": "fix",
