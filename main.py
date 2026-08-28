@@ -271,6 +271,7 @@ UPDATE_CONFIG_DEFAULTS = {
     "raw_root": "",
     "tree_url": "",
     "update_notes_url": "",
+    "github_token": "",
 }
 
 def load_update_config():
@@ -306,7 +307,7 @@ def get_update_config():
     return _update_config_cache
 
 def get_github_urls():
-    """从配置中提取 GitHub 仓库相关 URL。"""
+    """从配置中提取 GitHub 仓库相关 URL 和 Token。"""
     cfg = get_update_config()
     return {
         "repo_url": cfg.get("repo_url", ""),
@@ -314,6 +315,7 @@ def get_github_urls():
         "raw_root": cfg.get("raw_root", ""),
         "tree_url": cfg.get("tree_url", ""),
         "update_notes_url": cfg.get("update_notes_url", ""),
+        "github_token": cfg.get("github_token", ""),
     }
 
 # 模块级变量，从配置文件读取。配置文件不存在时返回空字符串，不影响启动。
@@ -323,6 +325,7 @@ GITHUB_VERSION_URL = _gh_urls["version_url"]
 GITHUB_RAW_ROOT = _gh_urls["raw_root"]
 GITHUB_TREE_URL = _gh_urls["tree_url"]
 GITHUB_UPDATE_NOTES_URL = _gh_urls["update_notes_url"]
+GITHUB_TOKEN = _gh_urls.get("github_token", "")
 SKILLS_DIR = os.path.join(BASE_DIR, "skills")
 CANVAS_TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 LOCAL_IMAGE_IMPORT_MAX_BYTES = int(os.getenv("LOCAL_IMAGE_IMPORT_MAX_BYTES", str(50 * 1024 * 1024)))
@@ -2108,6 +2111,8 @@ def github_json(url: str, use_etag_cache: bool = False):
         "Accept": "application/vnd.github+json",
         "User-Agent": "Infinite-Canvas-Updater",
     }
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     cache_key = url
     if use_etag_cache and cache_key == GITHUB_TREE_URL:
         if GITHUB_TREE_CACHE["data"] and time.time() < GITHUB_TREE_CACHE["expires_at"]:
