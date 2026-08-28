@@ -2083,6 +2083,39 @@ def check_update():
         "reachable": bool(github["ok"]),
     }
 
+@app.get("/api/check-github-token")
+def check_github_token():
+    """检测 GitHub Token 配置状态并测试连通性。"""
+    cfg = get_update_config()
+    token = cfg.get("github_token", "")
+    result = {
+        "token_exists": bool(token),
+        "token_length": len(token) if token else 0,
+        "config_file_path": UPDATE_CONFIG_PATH,
+        "config_file_exists": os.path.exists(UPDATE_CONFIG_PATH),
+    }
+    if token:
+        try:
+            test_url = "https://api.github.com/repos/1639317521/1234/git/trees/master?recursive=1"
+            resp = requests.get(test_url, headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Infinite-Canvas-Updater",
+                "Authorization": f"Bearer {token}",
+            }, timeout=10)
+            result["test_status"] = resp.status_code
+            result["test_ok"] = resp.status_code == 200
+            result["test_rate_limit_remaining"] = resp.headers.get("X-RateLimit-Remaining", "unknown")
+            result["test_rate_limit_reset"] = resp.headers.get("X-RateLimit-Reset", "unknown")
+            if resp.status_code == 403:
+                data = resp.json()
+                result["test_error"] = data.get("message", str(resp.reason))
+            elif resp.status_code == 200:
+                result["test_tree_count"] = len(resp.json().get("tree", []))
+        except Exception as e:
+            result["test_error"] = str(e)
+            result["test_ok"] = False
+    return result
+
 def update_allowed_file(path: str) -> bool:
     path = str(path or "").replace("\\", "/").lstrip("/")
     if not path or any(part in {"", ".", ".."} for part in path.split("/")):
@@ -2113,6 +2146,7 @@ def github_json(url: str, use_etag_cache: bool = False):
     }
     # 运行时从配置读取 Token，修改 update_config.json 后无需重启即可生效
     _token = get_update_config().get("github_token", "") or GITHUB_TOKEN
+    print(f"[github_json] 目标URL: {url[:80]}... Token长度: {len(_token) if _token else 0}")  # 调试日志
     if _token:
         headers["Authorization"] = f"Bearer {_token}"
     cache_key = url
