@@ -10522,7 +10522,6 @@ function bindNodeEvents(){
                 }, 220);
             });
         item.addEventListener('dblclick', e => {
-            if(e.target.closest('video,audio')) return;
             if(e.target.closest('.image-delete,.image-name-badge')) return;
             e.preventDefault();
             e.stopPropagation();
@@ -10531,7 +10530,7 @@ function bindNodeEvents(){
             suppressImageClickUntil = Date.now() + 260;
             const target = thumbTarget();
             if(mediaKindForItem(target.image || {}) === 'video'){
-                smartActivateVideoPreview(item);
+                openImagePreviewSmart(target.targetNodeId, target.imageIndex);
                 return;
             }
             selectedId = id;
@@ -13118,6 +13117,18 @@ function openImageEditor(nodeId, imageIndex=0){
         img.onerror = null;
         img.removeAttribute('src');
         delete img.dataset.proxyFallbackTried;
+        const previewVideo = document.getElementById('previewCurrentVideo');
+        if(previewVideo){
+            const videoUrl = displayMediaUrl(image);
+            const prevImg = document.getElementById('previewCurrentImage');
+            if(prevImg) prevImg.style.display = 'none';
+            previewVideo.style.display = '';
+            previewVideo.removeAttribute('src');
+            previewVideo.onloadedmetadata = null;
+            previewVideo.onerror = null;
+            previewVideo.src = videoUrl;
+            previewVideo.load();
+        }
         setImageEditMode('preview');
         updatePreviewNavButtons();
         refreshIcons();
@@ -13192,6 +13203,8 @@ function closeImageEditor(){
         previewVideo.load?.();
         previewVideo.style.display = 'none';
     }
+    const prevImg = document.getElementById('previewCurrentImage');
+    if(prevImg) prevImg.style.display = '';
     clearEditDrawing(true);
     cropState = null; cropDrag = null; editDrawState = null; resetEditDrawingHistory(); gridCustomDrag = null; gridJoinDrag = null; gridJoinLayout = null; gridJoinImageCache = new Map(); gridJoinUserMoved = false; gridOperationMode = 'split'; gridJoinGroupId = '';
     previewNavState = {nodeId:'', index:0, count:0};

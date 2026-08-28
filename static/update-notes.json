@@ -1,7 +1,11 @@
 {
-  "version": "1.1.8",
+  "version": "1.1.10",
   "updated_at": "2026-08-28 19:20",
   "items": [
+    {
+      "type": "fix",
+      "text": "修复视频节点双击：改为打开预览弹窗（而非内联播放），并在弹窗中正确加载视频播放器。"
+    },
     {
       "type": "fix",
       "text": "github_token 改为运行时动态读取，修改 data/update_config.json 后无需重启服务即可生效。"
