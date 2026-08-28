@@ -1,6 +1,7 @@
-import sys, json, uuid, time, re, urllib.request, urllib.error
+import os, sys, json, uuid, time, re, urllib.request, urllib.error
 
-BASE = 'http://127.0.0.1:3000'
+_PORT = os.environ.get("WUCANVAS_PORT", "3000")
+BASE = os.environ.get("WUCANVAS_MCP_BASE_URL", f'http://127.0.0.1:{_PORT}').rstrip("/")
 
 BOX_W, BOX_H_PROMPT, BOX_H_GEN = 320, 170, 280
 STEP_Y, STEP_X = 240, 380

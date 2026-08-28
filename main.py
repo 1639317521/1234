@@ -616,6 +616,8 @@ def load_env_file():
 ensure_runtime_config_files()
 load_env_file()
 
+PORT = int(os.environ.get("WUCANVAS_PORT", "3000"))
+
 COMFYUI_INSTANCES = [s.strip() for s in os.getenv("COMFYUI_INSTANCES", "127.0.0.1:8188").split(",") if s.strip()]
 COMFYUI_ADDRESS = COMFYUI_INSTANCES[0]
 
@@ -1685,10 +1687,8 @@ def current_app_version():
                     return version
     except Exception:
         pass
-    try:
-        return time.strftime("%Y.%m.%d", time.localtime())
-    except Exception:
-        return ""
+    # 版本号必须来自 VERSION 文件。缺失时使用稳定语义版本，禁止以日期代替版本号。
+    return "1.0.0"
 
 def update_notes_path() -> str:
     return os.path.join(STATIC_DIR, "update-notes.json")
@@ -19902,5 +19902,5 @@ if __name__ == "__main__":
     # 关闭服务端协议级 WebSocket ping：部分客户端（如 PS UXP 面板）不会自动回 pong，
     # 默认 20s ping/20s 超时会把这些连接每隔一会儿就踢掉造成"频繁断连"。
     # 客户端有自己的应用层心跳 + 断线重连兜底，这里禁用协议 ping 更稳。
-    uvicorn.run(app, host="0.0.0.0", port=3000,
+    uvicorn.run(app, host="0.0.0.0", port=PORT,
                 ws_ping_interval=None, ws_ping_timeout=None)

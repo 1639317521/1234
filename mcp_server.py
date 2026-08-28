@@ -23,7 +23,8 @@ import json
 import httpx
 from mcp.server.mcpserver import MCPServer
 
-BASE_URL = os.environ.get("WUCANVAS_MCP_BASE_URL", "http://127.0.0.1:3000").rstrip("/")
+_MAIN_DEFAULT_PORT = os.environ.get("WUCANVAS_PORT", "3000")
+BASE_URL = os.environ.get("WUCANVAS_MCP_BASE_URL", f"http://127.0.0.1:{_MAIN_DEFAULT_PORT}").rstrip("/")
 MCP_API_TOKEN = os.environ.get("MCP_API_TOKEN", "wucanvas-mcp-default-token")
 PORT = int(os.environ.get("WUCANVAS_MCP_PORT", "8765"))
 
