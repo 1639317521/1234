@@ -1,10 +1,10 @@
 {
-  "version": "1.1.11",
-  "updated_at": "2026-08-28 19:20",
+  "version": "1.1.12",
+  "updated_at": "2026-08-28 20:00",
   "items": [
     {
       "type": "fix",
-      "text": "修复更多设置折叠组 max-height 过小，端口设置按钮被 overflow:hidden 裁掉。"
+      "text": "run.bat 自动读取 data/port_config.json 中的自定义端口启动，修改端口后无需手动改 bat 文件。"
     }
   ]
 }
