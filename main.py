@@ -264,6 +264,7 @@ GLOBAL_CONFIG_FILE = os.path.join(BASE_DIR, "global_config.json")
 
 # ── 更新源配置（从 data/update_config.json 读取）────────────────────────
 UPDATE_CONFIG_PATH = os.path.join(DATA_DIR, "update_config.json")
+PORT_CONFIG_PATH = os.path.join(DATA_DIR, "port_config.json")
 UPDATE_CONFIG_DEFAULTS = {
     "repo_url": "",
     "version_url": "",
@@ -616,7 +617,20 @@ def load_env_file():
 ensure_runtime_config_files()
 load_env_file()
 
-PORT = int(os.environ.get("WUCANVAS_PORT", "3000"))
+# 端口优先级：data/port_config.json → 环境变量 WUCANVAS_PORT → 默认 3000
+_PORT_CFG_PORT = None
+try:
+    if os.path.exists(PORT_CONFIG_PATH):
+        with open(PORT_CONFIG_PATH, "r", encoding="utf-8") as _f:
+            _port_cfg = json.load(_f)
+        _port_val = _port_cfg.get("port", "")
+        if _port_val:
+            _parsed = int(_port_val)
+            if 1 <= _parsed <= 65535:
+                _PORT_CFG_PORT = _parsed
+except Exception:
+    pass
+PORT = _PORT_CFG_PORT or int(os.environ.get("WUCANVAS_PORT", "3000"))
 
 COMFYUI_INSTANCES = [s.strip() for s in os.getenv("COMFYUI_INSTANCES", "127.0.0.1:8188").split(",") if s.strip()]
 COMFYUI_ADDRESS = COMFYUI_INSTANCES[0]
@@ -13865,6 +13879,38 @@ async def ai_config():
         "ms_chat_models": MODELSCOPE_CHAT_MODELS,
         "has_ms_key": bool(modelscope_api_key()),
     }
+
+@app.get("/api/port-config")
+async def get_port_config():
+    cfg = {"port": str(PORT)}
+    try:
+        if os.path.exists(PORT_CONFIG_PATH):
+            with open(PORT_CONFIG_PATH, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+    except Exception:
+        pass
+    if not cfg.get("port"):
+        cfg["port"] = str(PORT)
+    return cfg
+
+@app.post("/api/port-config")
+async def set_port_config(req: dict):
+    port = str(req.get("port", "")).strip()
+    if not port:
+        # 清除配置，恢复默认
+        if os.path.exists(PORT_CONFIG_PATH):
+            os.remove(PORT_CONFIG_PATH)
+        return {"ok": True, "port": "3000", "needs_restart": True}
+    try:
+        p = int(port)
+        if not (1 <= p <= 65535):
+            raise ValueError
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="端口号必须在 1~65535 之间")
+    os.makedirs(os.path.dirname(PORT_CONFIG_PATH), exist_ok=True)
+    with open(PORT_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({"port": str(p)}, f, ensure_ascii=False)
+    return {"ok": True, "port": str(p), "needs_restart": True}
 
 @app.get("/api/models")
 async def ai_models():

@@ -39,6 +39,11 @@
         "bulk.selectedCount": { zh: "已选 {n} 张", en: "{n} selected" },
         "bulk.deleteConfirm": { zh: "确认删除选中的 {n} 张图片？此操作不可恢复。", en: "Delete the selected {n} image(s)? This cannot be undone." },
         "bulk.deleting": { zh: "删除中…", en: "Deleting…" },
-        "bulk.noSelection": { zh: "请先选择要删除的图片", en: "Select images to delete first" }
+        "bulk.noSelection": { zh: "请先选择要删除的图片", en: "Select images to delete first" },
+        "port.title": { zh: "端口设置", en: "Port Settings" },
+        "port.portLabel": { zh: "服务端口", en: "Server Port" },
+        "port.portPlaceholder": { zh: "默认 3000", en: "Default 3000" },
+        "port.needsRestart": { zh: "修改端口后需重启服务生效", en: "Restart required for port change to take effect" },
+        "port.restartTip": { zh: "端口已保存。请重启后端服务（关闭窗口重新运行 run.bat）后刷新页面。", en: "Port saved. Please restart the backend (close and re-run run.bat) then refresh the page." }
     });
 })();

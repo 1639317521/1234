@@ -986,6 +986,28 @@
             background:#f8fafc;
         }
 
+        .studio-btn {
+            display:inline-flex;align-items:center;gap:6px;
+            padding:6px 16px;border:1px solid var(--border,#d1d5db);
+            border-radius:6px;background:var(--bg,#fff);
+            color:var(--text,#1e293b);font-size:13px;cursor:pointer;
+            white-space:nowrap;transition:all .15s;
+        }
+        .studio-btn:hover {
+            background:var(--bg-hover,#f1f5f9);
+        }
+        .studio-btn-primary {
+            background:var(--primary,#3b82f6);color:#fff;
+            border-color:var(--primary,#3b82f6);
+        }
+        .studio-btn-primary:hover {
+            background:var(--primary-hover,#2563eb);
+        }
+        .studio-modal-foot {
+            display:flex;gap:8px;justify-content:flex-end;
+            padding:12px 24px;border-top:1px solid var(--border,#e5e7eb);
+        }
+
         .studio-modal-body {
             padding:18px 20px;
             overflow:auto;
@@ -1606,6 +1628,15 @@
                             <line x1="6.5" y1="10" x2="6.5" y2="14"></line>
                         </svg>
                         <span class="side-pill-text" data-i18n="common.comfyuiSettings">工作流设置</span>
+                    </button>
+                    <button class="side-pill" onclick="openPortSettingsModal()" type="button" title="端口设置">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                        </svg>
+                        <span class="side-pill-text" data-i18n="port.title">端口设置</span>
                     </button>
                 </div>
                 
@@ -2769,6 +2800,72 @@
                 if(manual) alert(isEn ? 'Update check failed.' : '检测更新失败。');
             } finally {
                 if(badge) badge.classList.remove('checking');
+            }
+        }
+
+        // ── 端口设置弹窗 ──
+        async function openPortSettingsModal() {
+            let modal = document.getElementById('port-settings-modal');
+            if(!modal) {
+                modal = document.createElement('div');
+                modal.id = 'port-settings-modal';
+                modal.className = 'studio-modal';
+                modal.hidden = true;
+                modal.setAttribute('role', 'dialog');
+                modal.setAttribute('aria-modal', 'true');
+                modal.innerHTML = `<div class="studio-modal-panel" style="max-width:440px">
+                    <div class="studio-modal-head">
+                        <div class="studio-modal-title" data-i18n="port.title">端口设置</div>
+                        <button type="button" class="studio-modal-close" onclick="closePortSettingsModal()">&times;</button>
+                    </div>
+                    <div class="studio-modal-body" style="padding:20px 24px">
+                        <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)" data-i18n="port.needsRestart">修改端口后需重启服务生效</div>
+                        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px" data-i18n="port.portLabel">服务端口</label>
+                        <input id="port-settings-input" type="number" min="1" max="65535" placeholder="3000" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:14px;outline:none;box-sizing:border-box">
+                        <div id="port-settings-tip" style="display:none;margin-top:10px;padding:10px 12px;border-radius:6px;background:var(--bg-warning, #fff3cd);color:var(--text, #856404);font-size:13px;line-height:1.5" data-i18n="port.restartTip">端口已保存。请重启后端服务（关闭窗口重新运行 run.bat）后刷新页面。</div>
+                    </div>
+                    <div class="studio-modal-foot" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 24px;border-top:1px solid var(--border)">
+                        <button type="button" class="studio-btn" onclick="closePortSettingsModal()" data-i18n="common.cancel">取消</button>
+                        <button type="button" class="studio-btn studio-btn-primary" onclick="savePortSettings()" data-i18n="common.save">保存</button>
+                    </div>
+                </div>`;
+                document.body.appendChild(modal);
+                modal.addEventListener('click', event => {
+                    if(event.target === modal) closePortSettingsModal();
+                });
+            }
+            // 加载当前端口
+            try {
+                const data = await fetch('/api/port-config').then(r => r.json());
+                document.getElementById('port-settings-input').value = data.port || '3000';
+            } catch(e) {}
+            document.getElementById('port-settings-tip').style.display = 'none';
+            modal.hidden = false;
+            document.getElementById('port-settings-input')?.focus();
+        }
+        function closePortSettingsModal() {
+            const modal = document.getElementById('port-settings-modal');
+            if(modal) modal.hidden = true;
+        }
+        async function savePortSettings() {
+            const input = document.getElementById('port-settings-input');
+            const tip = document.getElementById('port-settings-tip');
+            if(!input) return;
+            const port = input.value.trim();
+            try {
+                const res = await fetch('/api/port-config', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({port})
+                });
+                if(!res.ok) {
+                    const err = await res.json().catch(()=>({}));
+                    alert(err.detail || '保存失败');
+                    return;
+                }
+                tip.style.display = 'block';
+            } catch(e) {
+                alert('保存失败：' + e.message);
             }
         }
     </script>
