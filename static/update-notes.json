@@ -1,10 +1,38 @@
 {
-  "version": "1.0.0",
-  "updated_at": "",
+  "version": "1.1.5",
+  "updated_at": "2026-08-28 18:37",
   "items": [
     {
       "type": "feature",
-      "text": "在这里填写更新内容"
+      "text": "新增 UI 端口设置功能：侧边栏「更多设置」→「端口设置」，修改端口后重启生效。端口配置存储在 data/port_config.json，在线更新不覆盖。"
+    },
+    {
+      "type": "update",
+      "text": "添加 WUCANVAS_PORT 环境变量支持，支持在 API/.env 中自定义端口。"
+    },
+    {
+      "type": "fix",
+      "text": "移除 quality UI 按钮，quality 完全由分辨率自动决定（1K→low, 2K→medium, 4K→high）。"
+    },
+    {
+      "type": "update",
+      "text": "quality 自动跟随分辨率，移除 'best' 无效选项。"
+    },
+    {
+      "type": "update",
+      "text": "图片分辨率映射对齐猛增画布方案：2K 非正方形比例大幅提升分辨率（16:9 从 2048x1152→3072x1728），4K 正方形从 4096x4096→2880x2880。"
+    },
+    {
+      "type": "performance",
+      "text": "画布平移改为按动画帧合并更新，小地图每帧最多重建一次，降低大画布快速拖动时的主线程负载。"
+    },
+    {
+      "type": "update",
+      "text": "建立递增语义版本号制度，更新时间仅作为附注，不再使用日期作为版本号。"
+    },
+    {
+      "type": "feature",
+      "text": "新增小地图开关按钮，点击可隐藏/显示小地图，状态持久化到 localStorage。"
     }
   ]
 }
