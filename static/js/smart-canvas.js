@@ -3158,7 +3158,6 @@ function renderApiParams(){
         ${renderModelControl(models)}
         ${renderSizePickerControl('', true)}
         ${renderAngleControl()}
-        ${renderQualityControl()}
         ${renderCountVisualControl()}
         ${isJimengProviderId(settings.provider_id) ? renderJimengUpscaleControl() : ''}
     `;
@@ -3213,7 +3212,6 @@ function renderVolcengineParams(){
         ${renderModelControl(models)}
         ${renderSizePickerControl('', true)}
         ${renderAngleControl()}
-        ${renderQualityControl()}
         ${renderCountVisualControl()}
     `;
 }
@@ -3256,7 +3254,6 @@ function renderRunningHubParams(){
         dynamicParams.innerHTML = `
             ${renderRhConfigControl(ref)}
             ${renderSizePickerControl('', true)}
-            ${renderQualityControl()}
             ${renderCountVisualControl()}
         `;
         return;
@@ -3682,20 +3679,6 @@ function renderInlineCustomSizeFields(prefix=''){
 }
 function qualityForResolution(resolution){
     return resolution === '4k' ? 'high' : resolution === '2k' ? 'medium' : resolution === '1k' ? 'low' : 'auto';
-}
-function renderQualityControl(){
-    const value = settings.quality || qualityForResolution(settings.resolution);
-    const labels = {low:tr('smart.qualityLow'), medium:tr('smart.qualityMid'), high:tr('smart.qualityHigh')};
-    const autoText = tr('smart.qualityAuto');
-    return `<div class="smart-control quality-control">
-        <button class="smart-pill" type="button"><i data-lucide="sliders-horizontal"></i><span>${escapeHtml(labels[value] || value || autoText)}</span></button>
-        <div class="smart-popover compact-popover">
-            <div class="smart-popover-title">${escapeHtml(tr('smart.quality'))}</div>
-            <div class="seg-row">
-                ${Object.entries(labels).map(([k, l]) => `<button type="button" class="${k === value ? 'active' : ''}" data-smart-param="quality" data-smart-value="${escapeHtml(k)}">${escapeHtml(l)}</button>`).join('')}
-            </div>
-        </div>
-    </div>`;
 }
 function renderCountVisualControl(){
     const value = Number(settings.count || 1);
