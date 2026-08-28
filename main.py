@@ -164,10 +164,39 @@ class ConnectionManager:
 manager = ConnectionManager()
 GLOBAL_LOOP = None
 
+# ── 自动探测本地代理（Clash 等）───────────────────────────────
+def _auto_detect_proxy():
+    """扫描常见代理端口，如果找到就设置 HTTP_PROXY / HTTPS_PROXY 环境变量，
+    让 urllib / requests 等库自动走代理。"""
+    import socket
+    # 如果已经设置了环境变量，尊重用户手动配置
+    if os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy"):
+        return
+    common_ports = [7897, 7890, 10809, 11223, 1080, 1081, 8080, 3128]
+    for port in common_ports:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.3)
+            result = s.connect_ex(("127.0.0.1", port))
+            s.close()
+            if result == 0:
+                proxy = f"http://127.0.0.1:{port}"
+                os.environ["HTTP_PROXY"] = proxy
+                os.environ["HTTPS_PROXY"] = proxy
+                os.environ["http_proxy"] = proxy
+                os.environ["https_proxy"] = proxy
+                print(f"[proxy] 自动探测到本地代理: {proxy}")
+                return
+        except Exception:
+            continue
+    print("[proxy] 未探测到本地代理，更新检测将直连网络")
+
 @app.on_event("startup")
 async def startup_event():
     global GLOBAL_LOOP
     GLOBAL_LOOP = asyncio.get_running_loop()
+    # 自动探测本地代理（Clash / 其他常见代理）
+    _auto_detect_proxy()
     # 启动云端 ComfyUI WS 进度监听（连接失败自动重试，不影响轮询兜底）
     try:
         start_comfy_ws_listeners()
