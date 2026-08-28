@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax 10–15秒文戏"
+  short_description: "把长剧本拆成可连续剪辑的短文戏生成单元"
+  default_prompt: "Use $minimax-drama-prompt to split this script into MiniMax 10–15 second dialogue scenes and write the first production-ready prompt."

@@ -1,0 +1,182 @@
+{
+  "title": "custom/0.4-5秒-加速",
+  "fields": [
+    {
+      "id": "f_thq6ewp",
+      "node": "114",
+      "input": "image",
+      "name": "图片1",
+      "type": "image",
+      "default": "主体1.png",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_csev0ow",
+      "node": "386",
+      "input": "image",
+      "name": "图片2",
+      "type": "image",
+      "default": "主体2.png",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_8k4jng9",
+      "node": "368",
+      "input": "value",
+      "name": "数值",
+      "type": "textarea",
+      "default": "电影中国当代工业纪实风格,化工厂中控室夜班场景,主光源来自DCS屏幕冷白光,辅以顶部暖色荧光灯,形成冷暖对比。严格保持首帧的人物容貌、服装、发型、道具位置不变。\n\n0.00秒时<主体1>与<主体2>同框于操作台前。<主体1>坐于台前木椅上,面容与<图片1>完全一致,蓝色工装左胸口袋插一支笔,金属细框眼镜架于鼻梁,右手指向摊开的台账页中某一行。画面后方三块DCS屏幕亮着,左侧灯柱为红色常亮。<主体2>站于操作台右侧约1米处,面容与<图片2>完全一致,蓝色工装拉链拉至领口,双手自然垂于体侧,发型与<图片2>一致。\n\n0.00–4.00秒<主体1>食指指向台账行,眉头向下压紧,嘴唇张开。<d>[Chinese] 昨晚夜班,反应器温度高报响了三次,三次。</d>\n4.00–6.00秒<主体1>收回手指,右手掌心拍在台账页面上,目光从台账移向<主体2>。\n\n6.00–10.00秒<主体2>身体微微后仰,下巴抬起,嘴角向左微撇,右手从体侧抬起至腰际,掌心向上摊开。<d>[Chinese] 那个报警不是经常误报吗。</d>\n\n镜头固定中近景,两人同框,<主体1>居左占画幅3/5,<主体2>居右占2/5,平视机位,静止不动。\n\n对白:仅<主体1>和<主体2>各一句短句,各约2秒,其余时间双唇闭合。\n\n声音:低频设备嗡鸣持续全程;第1秒处翻页纸张声一次;第4秒处手掌拍纸面闷响一次。\n\n禁止:新增人物、换脸换装、现代物件、伪文字、字幕、镜头反转、背景出现人影、物品发光变形。禁止<主体1>眼镜脱落、消失、歪斜或变款。禁止将画面描述文字当作台词念出。没有<d>标记时全程静默、不发出任何人声。画面中绝对不能出现任何字幕、字幕条、中文或英文文字、台词字样;画面下方保持干净的实拍内容。",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_8wavaxi",
+      "node": "135",
+      "input": "value",
+      "name": "时长",
+      "type": "slider",
+      "default": 5,
+      "min": 0.0,
+      "max": 15.0,
+      "step": 1.0,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_euac4g5",
+      "node": "384",
+      "input": "image",
+      "name": "图片3",
+      "type": "image",
+      "default": "主体3.jpeg",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_lk0dptt",
+      "node": "385",
+      "input": "image",
+      "name": "图片4",
+      "type": "image",
+      "default": "主体4.jpeg",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_f42pwu1",
+      "node": "387",
+      "input": "image",
+      "name": "图片",
+      "type": "image",
+      "default": "主体4.jpeg",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_totbsmk",
+      "node": "388",
+      "input": "image",
+      "name": "图片",
+      "type": "image",
+      "default": "主体4.jpeg",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_gdy3aiy",
+      "node": "389",
+      "input": "image",
+      "name": "图片",
+      "type": "image",
+      "default": "主体4.jpeg",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_im23rx7",
+      "node": "390",
+      "input": "image",
+      "name": "图片",
+      "type": "image",
+      "default": "主体4.jpeg",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_n02kh1n",
+      "node": "115",
+      "input": "megapixels",
+      "name": "百万像素",
+      "type": "slider",
+      "default": 0.4,
+      "min": 0.1,
+      "max": 1.2,
+      "step": 0.1,
+      "options": [],
+      "random_enabled": false
+    },
+    {
+      "id": "f_wnzwzns",
+      "node": "115",
+      "input": "aspect_ratio",
+      "name": "aspect_ratio",
+      "type": "dropdown",
+      "default": "9:16 (Portrait Widescreen)",
+      "min": null,
+      "max": null,
+      "step": null,
+      "options": [
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)"
+      ],
+      "random_enabled": false
+    }
+  ],
+  "mini_cards": {
+    "prompt": {
+      "x": 24,
+      "y": 30
+    },
+    "image": {
+      "x": 24,
+      "y": 210
+    },
+    "custom": {
+      "x": 280,
+      "y": 78
+    },
+    "output": {
+      "x": 540,
+      "y": 120
+    }
+  }
+}

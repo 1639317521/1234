@@ -1,0 +1,515 @@
+{
+  "114": {
+    "inputs": {
+      "image": "主体1.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "115": {
+    "inputs": {
+      "aspect_ratio": "9:16 (Portrait Widescreen)",
+      "megapixels": 0.4,
+      "multiple": 32
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "分辨率选择器"
+    }
+  },
+  "121": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "122": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "123": {
+    "inputs": {
+      "samples": [
+        "127",
+        0
+      ],
+      "vae": [
+        "122",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "124": {
+    "inputs": {
+      "samples": [
+        "127",
+        0
+      ],
+      "vae": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "125": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  },
+  "126": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 4,
+      "denoise": 1,
+      "model": [
+        "129",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器"
+    }
+  },
+  "127": {
+    "inputs": {
+      "noise": [
+        "131",
+        0
+      ],
+      "guider": [
+        "128",
+        0
+      ],
+      "sampler": [
+        "125",
+        0
+      ],
+      "sigmas": [
+        "126",
+        0
+      ],
+      "latent_image": [
+        "366",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "128": {
+    "inputs": {
+      "model": [
+        "373",
+        0
+      ],
+      "conditioning": [
+        "372",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "129": {
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "130": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "131": {
+    "inputs": {
+      "noise_seed": [
+        "186",
+        0
+      ]
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "134": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "135",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "数学表达式"
+    }
+  },
+  "135": {
+    "inputs": {
+      "value": 5
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (duration)"
+    }
+  },
+  "138": {
+    "inputs": {
+      "model": [
+        "376",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "MiniMax H3 Mem Eff Sage Attention Patch"
+    }
+  },
+  "140": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_v4_step600_comfyui_T8-convert.safetensors",
+      "strength_model": 1.7,
+      "model": [
+        "138",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "186": {
+    "inputs": {
+      "seed": 255030554612573
+    },
+    "class_type": "Seed (rgthree)",
+    "_meta": {
+      "title": "Seed (rgthree)"
+    }
+  },
+  "188": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "images": [
+        "124",
+        0
+      ],
+      "audio": [
+        "123",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频"
+    }
+  },
+  "189": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "188",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频"
+    }
+  },
+  "340": {
+    "inputs": {
+      "width": [
+        "115",
+        0
+      ],
+      "height": [
+        "115",
+        1
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 32,
+      "device": "cpu",
+      "image": [
+        "367",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "366": {
+    "inputs": {
+      "prompt": [
+        "368",
+        0
+      ],
+      "width": [
+        "115",
+        0
+      ],
+      "height": [
+        "115",
+        1
+      ],
+      "length": [
+        "134",
+        1
+      ],
+      "ref_image_size": "match",
+      "clip": [
+        "130",
+        0
+      ],
+      "vae": [
+        "121",
+        0
+      ],
+      "audio_vae": [
+        "122",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "340",
+        0
+      ],
+      "ref_images.ref_image_1": [
+        "386",
+        0
+      ],
+      "ref_images.ref_image_2": [
+        "384",
+        0
+      ],
+      "ref_images.ref_image_3": [
+        "385",
+        0
+      ],
+      "ref_images.ref_image_4": [
+        "387",
+        0
+      ],
+      "ref_images.ref_image_5": [
+        "389",
+        0
+      ],
+      "ref_images.ref_image_6": [
+        "390",
+        0
+      ],
+      "ref_images.ref_image_7": [
+        "391",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "_meta": {
+      "title": "MiniMax H3 Reference to Video"
+    }
+  },
+  "367": {
+    "inputs": {
+      "anything": [
+        "114",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理显存占用"
+    }
+  },
+  "368": {
+    "inputs": {
+      "value": "电影中国当代工业纪实风格,化工厂中控室夜班场景,主光源来自DCS屏幕冷白光,辅以顶部暖色荧光灯,形成冷暖对比。严格保持首帧的人物容貌、服装、发型、道具位置不变。\n\n0.00秒时<主体1>与<主体2>同框于操作台前。<主体1>坐于台前木椅上,面容与<图片1>完全一致,蓝色工装左胸口袋插一支笔,金属细框眼镜架于鼻梁,右手指向摊开的台账页中某一行。画面后方三块DCS屏幕亮着,左侧灯柱为红色常亮。<主体2>站于操作台右侧约1米处,面容与<图片2>完全一致,蓝色工装拉链拉至领口,双手自然垂于体侧,发型与<图片2>一致。\n\n0.00–4.00秒<主体1>食指指向台账行,眉头向下压紧,嘴唇张开。<d>[Chinese] 昨晚夜班,反应器温度高报响了三次,三次。</d>\n4.00–6.00秒<主体1>收回手指,右手掌心拍在台账页面上,目光从台账移向<主体2>。\n\n6.00–10.00秒<主体2>身体微微后仰,下巴抬起,嘴角向左微撇,右手从体侧抬起至腰际,掌心向上摊开。<d>[Chinese] 那个报警不是经常误报吗。</d>\n\n镜头固定中近景,两人同框,<主体1>居左占画幅3/5,<主体2>居右占2/5,平视机位,静止不动。\n\n对白:仅<主体1>和<主体2>各一句短句,各约2秒,其余时间双唇闭合。\n\n声音:低频设备嗡鸣持续全程;第1秒处翻页纸张声一次;第4秒处手掌拍纸面闷响一次。\n\n禁止:新增人物、换脸换装、现代物件、伪文字、字幕、镜头反转、背景出现人影、物品发光变形。禁止<主体1>眼镜脱落、消失、歪斜或变款。禁止将画面描述文字当作台词念出。没有<d>标记时全程静默、不发出任何人声。画面中绝对不能出现任何字幕、字幕条、中文或英文文字、台词字样;画面下方保持干净的实拍内容。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Input Text (Prompt)"
+    }
+  },
+  "372": {
+    "inputs": {
+      "anything": [
+        "366",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理显存占用"
+    }
+  },
+  "373": {
+    "inputs": {
+      "anything": [
+        "140",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理显存占用"
+    }
+  },
+  "375": {
+    "inputs": {
+      "head_chunks": 10,
+      "model": [
+        "383",
+        0
+      ]
+    },
+    "class_type": "MiniMaxLowVRAMAttention",
+    "_meta": {
+      "title": "MiniMax H3 Low VRAM Attention"
+    }
+  },
+  "376": {
+    "inputs": {
+      "chunks": 4,
+      "seq_threshold": 4096,
+      "model": [
+        "375",
+        0
+      ]
+    },
+    "class_type": "MiniMaxChunkFeedForward",
+    "_meta": {
+      "title": "MiniMax H3 Chunk FeedForward"
+    }
+  },
+  "383": {
+    "inputs": {
+      "enable_fp16_accumulation": true,
+      "model": [
+        "129",
+        0
+      ]
+    },
+    "class_type": "ModelPatchTorchSettings",
+    "_meta": {
+      "title": "Model Patch Torch Settings"
+    }
+  },
+  "384": {
+    "inputs": {
+      "image": "主体3.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像3"
+    }
+  },
+  "385": {
+    "inputs": {
+      "image": "主体4.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像4"
+    }
+  },
+  "386": {
+    "inputs": {
+      "image": "主体2.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像2"
+    }
+  },
+  "387": {
+    "inputs": {
+      "image": "主体4.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像5"
+    }
+  },
+  "388": {
+    "inputs": {
+      "image": "主体4.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像5"
+    }
+  },
+  "389": {
+    "inputs": {
+      "image": "主体4.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像6"
+    }
+  },
+  "390": {
+    "inputs": {
+      "image": "主体4.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像7"
+    }
+  },
+  "391": {
+    "inputs": {
+      "image": "主体4.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像8"
+    }
+  }
+}

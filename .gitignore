@@ -1,0 +1,52 @@
+# Python 运行时（大文件，不推送）
+/python/
+
+# 用户数据（API 密钥、画布、历史记录、预览缓存）
+/data/*.json
+/data/canvases/
+/data/media_previews/
+/data/update_backups/
+!data/update_config.json
+
+# 生成资产
+/assets/input/
+/assets/output/
+/assets/library/
+
+# 备份
+/_backups/
+/data/update_backups/
+
+# 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.vscode/
+.idea/
+
+# 环境变量
+.env
+.env.local
+
+# 打包产物
+/packages/
+/dist/
+*.zip
+*.7z
+
+# 系统
+Thumbs.db
+.DS_Store
+
+# 临时文件（不推送）
+/_c_a.json
+/_c_b.json
+/_fix_main_mcp.py
+/_main_server.log
+/_main_server_err.log
+/_self_restart.bat
+/_verify_probe.py
+/c_list.json
+/history.json
+/get-pip.py
