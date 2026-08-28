@@ -4396,6 +4396,10 @@ function bindDynamicParams(){
         ctrl.onmouseleave = () => ctrl.classList.remove('interacting');
     });
     dynamicParams.querySelectorAll('.smart-control > .smart-pill').forEach(pill => {
+        // 如果按钮已有 HTML 内联 onclick（如角度按钮的 onclick="openAnglePanel()"），保留它
+        if(pill.hasAttribute('onclick')){
+            return;
+        }
         pill.onclick = event => {
             event.preventDefault();
             event.stopPropagation();
@@ -19966,36 +19970,60 @@ function ensureAnglePanel(){
         + '<div class="angle-preview-box"><div class="angle-preview-label">相机命令预览</div><div id="angleCommandPreview" class="angle-preview-text">将相机保持原位</div></div>'
         + '</div></div></div>';
     document.body.appendChild(div);
+    
+    // 修复：在面板创建后实时绑定滑块事件（DOMContentLoaded 时面板还不存在）
+    ['H','V','D'].forEach(a => {
+        const slider = document.getElementById('angleSlider' + a);
+        const val = document.getElementById('angleVal' + a);
+        if(slider){
+            slider.addEventListener('input', function(){
+                if(val) val.value = this.value;
+                updateAngleSceneCamera();
+                updateAngleCommand();
+            });
+        }
+    });
+    
     // 重新渲染 lucide 图标
     if(window.lucide) setTimeout(() => lucide.createIcons(), 0);
 }
 
 async function openAnglePanel(){
-    ensureAnglePanel();
-    const panel = document.getElementById('anglePanel');
-    if(!panel) return;
-    panel.style.display = 'flex';
-    // 从当前节点获取图片 URL
-    const node = activeComposerSubject;
-    let imgUrl = '';
-    if(node && node.images && node.images.length > 0){
-        // 尝试获取最后一张图片
-        const lastImg = node.images[node.images.length - 1];
-        imgUrl = lastImg.url || lastImg.thumbUrl || '';
+    console.log('[角度面板] openAnglePanel 被调用');
+    try {
+        ensureAnglePanel();
+        console.log('[角度面板] ensureAnglePanel 完成');
+        const panel = document.getElementById('anglePanel');
+        console.log('[角度面板] panel 元素:', panel);
+        if(!panel) return;
+        panel.style.display = 'flex';
+        // 从当前节点获取图片 URL
+        const node = activeComposerSubject;
+        let imgUrl = '';
+        if(node && node.images && node.images.length > 0){
+            // 尝试获取最后一张图片
+            const lastImg = node.images[node.images.length - 1];
+            imgUrl = lastImg.url || lastImg.thumbUrl || '';
+        }
+        // 恢复滑块值
+        const ca = settings.cameraAngle || {h:0,v:0,d:4};
+        document.getElementById('angleSliderH').value = ca.h;
+        document.getElementById('angleSliderV').value = ca.v;
+        document.getElementById('angleSliderD').value = ca.d;
+        document.getElementById('angleValH').value = ca.h;
+        document.getElementById('angleValV').value = ca.v;
+        document.getElementById('angleValD').value = ca.d.toFixed(1);
+        updateAngleCommand();
+        // 初始化 3D 场景
+        await initAngleScene(imgUrl);
+        // 重新渲染 lucide 图标
+        if(window.lucide) setTimeout(() => lucide.createIcons(), 0);
+    } catch (e) {
+        console.error('打开角度面板失败:', e);
+        // 即使 3D 场景初始化失败，也确保面板显示
+        const panel = document.getElementById('anglePanel');
+        if(panel) panel.style.display = 'flex';
     }
-    // 恢复滑块值
-    const ca = settings.cameraAngle || {h:0,v:0,d:4};
-    document.getElementById('angleSliderH').value = ca.h;
-    document.getElementById('angleSliderV').value = ca.v;
-    document.getElementById('angleSliderD').value = ca.d;
-    document.getElementById('angleValH').value = ca.h;
-    document.getElementById('angleValV').value = ca.v;
-    document.getElementById('angleValD').value = ca.d.toFixed(1);
-    updateAngleCommand();
-    // 初始化 3D 场景
-    await initAngleScene(imgUrl);
-    // 重新渲染 lucide 图标
-    if(window.lucide) setTimeout(() => lucide.createIcons(), 0);
 }
 
 function closeAnglePanel(){
@@ -20171,20 +20199,7 @@ function disposeAngleScene(){
     angleThreeGrid = null;
 }
 
-// 绑定滑块事件
-document.addEventListener('DOMContentLoaded', function(){
-    ['H','V','D'].forEach(a => {
-        const slider = document.getElementById('angleSlider' + a);
-        const val = document.getElementById('angleVal' + a);
-        if(slider){
-            slider.addEventListener('input', function(){
-                if(val) val.value = this.value;
-                updateAngleSceneCamera();
-                updateAngleCommand();
-            });
-        }
-    });
-});
+
 
 function applyAngleToNode(){
     const node = activeComposerSubject;
@@ -20215,6 +20230,9 @@ function applyAngleToNode(){
                 node.promptDraftText = cmd;
             }
         }
+        node.promptDraftHtml = escapeHtml(node.promptDraftText);
+        // 直接写入提示词输入框，确保用户立即看到
+        promptInput.textContent = node.promptDraftText;
     }
     // 更新 runSettings
     node.runSettings = cloneSmartSettings(settings);

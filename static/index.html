@@ -738,6 +738,9 @@
         }
         .project-version-badge:hover { color:var(--text); border-color:var(--accent, #6366f1); }
         .project-version-badge.checking { opacity:.6; animation:badge-pulse 1s ease-in-out infinite; }
+        .project-version-badge.update-available { color:#16a34a; border-color:rgba(34,197,94,.5); background:rgba(34,197,94,.08); }
+        html.theme-dark .project-version-badge.update-available,
+        body.theme-dark .project-version-badge.update-available { color:#86efac; border-color:rgba(134,239,172,.5); background:rgba(74,222,128,.1); }
         @keyframes badge-pulse { 0%,100%{opacity:.5;} 50%{opacity:1;} }
 
         .sidebar:hover .project-version-badge {
@@ -2236,6 +2239,9 @@
             gitBtn.dataset.localVersion = localVersion || '';
             gitBtn.dataset.remoteVersion = remoteVersion || '';
             document.getElementById('update-now-btn')?.classList.add('show');
+            // 版本号按钮高亮绿色
+            const badge = document.getElementById('project-version-badge');
+            if(badge) badge.classList.add('update-available');
             updateProjectUpdateTitle();
         }
 

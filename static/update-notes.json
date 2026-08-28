@@ -1,10 +1,10 @@
 {
-  "version": "1.1.16",
-  "updated_at": "2026-08-28 20:40",
+  "version": "1.1.21",
+  "updated_at": "2026-08-29 02:20",
   "items": [
     {
-      "type": "feature",
-      "text": "更多设置中新增「WS 监听」开关（默认关闭），开启后重启服务生效。生成进度始终可通过轮询获取，不受影响。"
+      "type": "fix",
+      "text": "修复角度面板应用后提示词不显示：改用 promptInput.textContent 直接写入，绕过 loadPromptDraft 复杂逻辑链路"
     }
   ]
 }
