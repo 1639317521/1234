@@ -30,6 +30,7 @@ const SMART_MINIMAX_RUNNINGHUB_WORKFLOW_TITLE = 'Minimax-多参视频生成';
 const inputPromptPreview = document.getElementById('inputPromptPreview');
 const minimap = document.getElementById('minimap');
 const minimapContent = document.getElementById('minimapContent');
+const minimapToggle = document.getElementById('minimapToggle');
 const smartArrangeBtn = document.getElementById('smartArrangeBtn');
 const imageEditModal = document.getElementById('imageEditModal');
 const smartLogModal = document.getElementById('smartLogModal');
@@ -79,6 +80,7 @@ const promptTemplateCats = document.getElementById('promptTemplateCats');
 const promptTemplateBody = document.getElementById('promptTemplateBody');
 const composerTemplateBtn = document.getElementById('composerTemplateBtn');
 let minimapViewport = document.getElementById('minimapViewport');
+let minimapVisible = true; // 小地图显示状态
 let canvas = null;
 let canvasUsesConnections = true;
 let nodes = [];
@@ -87,9 +89,56 @@ let selectedIds = [];
 let selectedImage = {nodeId:'', index:-1};
 let dragState = null;
 let dragRafId = null;
+let dragFrameCounter = 0;
+// 视口外节点懒渲染缓存（nodeId -> boolean：true=可见，false=隐藏）
+let _nodeVisCache = null;
+let _nodeVisBounds = null;
+let _nodeVisDirty = false;
 let loopInsertPreview = null;
 let selectionState = null;
 let isRKeyDown = false;
+
+// FPS 计数器
+let fpsEl = null;
+let fpsFrameCount = 0;
+let fpsLastTime = 0;
+let fpsDisplayValue = 0;
+let fpsRafId = null;
+function initFpsCounter(){
+    fpsEl = document.createElement('div');
+    fpsEl.className = 'smart-fps-counter';
+    fpsEl.textContent = '-- FPS';
+    document.body.appendChild(fpsEl);
+    fpsFrameCount = 0;
+    fpsLastTime = performance.now();
+    if(fpsRafId) cancelAnimationFrame(fpsRafId);
+    function tick(){
+        fpsFrameCount++;
+        const now = performance.now();
+        const elapsed = now - fpsLastTime;
+        if(elapsed >= 1000){
+            fpsDisplayValue = Math.round(fpsFrameCount * 1000 / elapsed);
+            fpsEl.textContent = fpsDisplayValue + ' FPS';
+            fpsFrameCount = 0;
+            fpsLastTime = now;
+        }
+        fpsRafId = requestAnimationFrame(tick);
+    }
+    fpsRafId = requestAnimationFrame(tick);
+}
+function toggleMinimap(){
+    minimapVisible = !minimapVisible;
+    localStorage.setItem('smart_canvas_minimap', minimapVisible ? '1' : '0');
+    if(minimap){
+        minimap.classList.toggle('hidden', !minimapVisible);
+    }
+    if(minimapToggle){
+        minimapToggle.classList.toggle('active', minimapVisible);
+    }
+    if(minimapVisible){
+        renderMinimap();
+    }
+}
 let selectionJustFinished = false;
 let resizeState = null;
 let llmInstructionResizeState = null;
@@ -350,7 +399,7 @@ let settings = {
     customSize:'',
     customWidth:'',
     customHeight:'',
-    quality:'auto',
+    quality:'',
     count:1,
     videoProvider:'',
     videoModel:'',
@@ -404,15 +453,15 @@ const MS_GEN_MODELS = {
     custom: { label:tr('smart.custom') || '自定义', modelId:'', acceptsImage:true, endpoint:'/api/ms/generate' }
 };
 const SIZE_MAP = {
-    square: {'1k':'1024x1024','2k':'2048x2048','4k':'4096x4096'},
-    portrait: {'1k':'1024x1536','2k':'1360x2048','4k':'2352x3520'},
-    portrait43: {'1k':'1008x1344','2k':'1536x2048','4k':'2448x3264'},
-    landscape43: {'1k':'1344x1008','2k':'2048x1536','4k':'3264x2448'},
-    landscape: {'1k':'1536x1024','2k':'2048x1360','4k':'3520x2352'},
-    story: {'1k':'720x1280','2k':'1152x2048','4k':'2160x3840'},
-    wide: {'1k':'1280x720','2k':'2048x1152','4k':'3840x2160'},
-    ultrawide: {'1k':'1280x544','2k':'2048x880','4k':'3840x1648'},
-    ultratall: {'1k':'544x1280','2k':'880x2048','4k':'1648x3840'}
+    square: {'1k':'1024x1024','2k':'2048x2048','4k':'2880x2880'},
+    portrait: {'1k':'1024x1536','2k':'2048x3072','4k':'2336x3520'},
+    portrait43: {'1k':'1024x1360','2k':'2048x2720','4k':'2496x3328'},
+    landscape43: {'1k':'1360x1024','2k':'2720x2048','4k':'3328x2496'},
+    landscape: {'1k':'1536x1024','2k':'3072x2048','4k':'3520x2336'},
+    story: {'1k':'864x1536','2k':'1728x3072','4k':'2160x3840'},
+    wide: {'1k':'1536x864','2k':'3072x1728','4k':'3840x2160'},
+    ultrawide: {'1k':'1280x544','2k':'3072x1312','4k':'3840x1648'},
+    ultratall: {'1k':'544x1280','2k':'1312x3072','4k':'1648x3840'}
 };
 const API_RATIO_VALUES = {
     square:'1:1',
@@ -425,8 +474,8 @@ const API_RATIO_VALUES = {
     ultrawide:'21:9',
     ultratall:'9:21'
 };
-const RES_LONG_SIDE = { '1k':1536, '2k':2048, '4k':3840 };
-const RES_PIXEL_LIMIT = { '1k':1572864, '2k':4194304, '4k':8294400 };
+const RES_LONG_SIDE = { '1k':1536, '2k':3072, '4k':3840 };
+const RES_PIXEL_LIMIT = { '1k':1572864, '2k':6291456, '4k':8294400 };
 function tr(key){ return window.StudioI18n?.t ? window.StudioI18n.t(key) : key; }
 function trf(key, values={}){
     return Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, String(value)), tr(key));
@@ -659,46 +708,65 @@ function smartImageNearViewport(img){
     if(!img?.isConnected || !shell) return false;
     const shellRect = shell.getBoundingClientRect();
     const rect = img.getBoundingClientRect();
-    const margin = 220;
+    // 增大边距，确保缓冲区外也会加载，滚动时不会看到低分辨率
+    const margin = 300;
     return rect.right >= shellRect.left - margin && rect.left <= shellRect.right + margin
         && rect.bottom >= shellRect.top - margin && rect.top <= shellRect.bottom + margin;
 }
+// 根据当前缩放级别计算应该使用的预览尺寸
+function getSmartPreviewSizeForCurrentScale(){
+    const scale = Number(viewport?.scale || 1);
+    if(scale < 0.5) return 384;
+    if(scale < SMART_HIGH_RES_ZOOM_THRESHOLD) return 768;
+    return 1536;
+}
+function calcTargetImageUrl(img, original){
+    if(!original || original.startsWith('data:') || original.startsWith('blob:')) return original;
+    if(!original.startsWith('/output/') && !original.startsWith('/assets/')) return original;
+
+    const previewSize = getSmartPreviewSizeForCurrentScale();
+    // 达到最高阈值直接加载原图，不需要预览
+    if(previewSize >= 1536){
+        return displayMediaUrl({url:smartOriginalMediaUrl(original)});
+    }
+    // 否则使用对应尺寸的预览
+    return smartMediaPreviewUrl(original, previewSize);
+}
 function syncSmartSelectedImageResolution(root=null){
-    const selectedImages = [];
-    const wantHighRes = smartViewportWantsHighRes();
+    const imagesToUpdate = [];
     smartNodeElementsForHighResSync(root).forEach(scope => {
         scope.querySelectorAll?.('img[data-preview-src][data-original-src]').forEach(img => {
             if(img.dataset.previewKind === 'video') return;
-            const preview = img.dataset.previewSrc || '';
+            // 只处理可见区域内的图片，减少加载
+            if(!smartImageNearViewport(img)) return;
+
             const original = img.dataset.originalSrc || '';
-            if(!wantHighRes || !smartImageNearViewport(img)){
-                delete img.dataset.selectedHighResTarget;
-                if(preview && img.getAttribute('src') !== preview) img.src = preview;
+            const currentSrc = img.getAttribute('src') || '';
+            const targetUrl = calcTargetImageUrl(img, original);
+
+            if(!targetUrl) return;
+            if(currentSrc === targetUrl) return;
+
+            // 如果目标已经加载完成，直接切换
+            if(smartSelectedHighResLoaded.has(targetUrl)){
+                if(currentSrc !== targetUrl) img.src = targetUrl;
                 return;
             }
-            const target = displayMediaUrl({url:smartOriginalMediaUrl(original)});
-            if(!target) return;
-            img.dataset.selectedHighResTarget = target;
-            if(smartSelectedHighResLoaded.has(target)){
-                if(img.getAttribute('src') !== target) img.src = target;
-                return;
-            }
-            if(preview && img.getAttribute('src') !== preview) img.src = preview;
-            selectedImages.push({img, target});
+
+            imagesToUpdate.push({img, target:targetUrl});
         });
     });
     if(smartSelectedHighResTimer) clearTimeout(smartSelectedHighResTimer);
     const seq = ++smartSelectedHighResSeq;
-    smartSelectedHighResNodeIds = new Set(selectedNodeIds());
-    if(!selectedImages.length || smartImageEditorIsOpen()) return;
+    if(!imagesToUpdate.length || smartImageEditorIsOpen()) return;
     smartSelectedHighResTimer = setTimeout(async () => {
         smartSelectedHighResTimer = 0;
         if(seq !== smartSelectedHighResSeq || smartImageEditorIsOpen()) return;
-        await Promise.all(selectedImages.map(item => preloadSmartSelectedHighRes(item.target)));
+        await Promise.all(imagesToUpdate.map(item => preloadSmartSelectedHighRes(item.target)));
         if(seq !== smartSelectedHighResSeq || smartImageEditorIsOpen()) return;
-        selectedImages.forEach(({img, target}) => {
+        imagesToUpdate.forEach(({img, target}) => {
             if(!img.isConnected || img.dataset.selectedHighResTarget !== target) return;
-            if(!smartViewportWantsHighRes() || !smartImageNearViewport(img)) return;
+            if(!smartImageNearViewport(img)) return;
             if(smartSelectedHighResLoaded.has(target) && img.getAttribute('src') !== target) img.src = target;
         });
     }, SMART_SELECTED_HIGH_RES_DELAY);
@@ -2127,6 +2195,14 @@ function arrangeSelectedSmartNodes(){
     scheduleSave();
     toast('已整理选中节点');
 }
+let _minimapRenderFrame = 0;
+function scheduleMinimapRender(){
+    if(_minimapRenderFrame) return;
+    _minimapRenderFrame = requestAnimationFrame(() => {
+        _minimapRenderFrame = 0;
+        renderMinimap();
+    });
+}
 function applyViewport(){
     world.style.transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`;
     // world 被 transform:scale 缩放后，其内部带 backdrop-filter 的卡片（参数设置/合成卡等）
@@ -2136,8 +2212,154 @@ function applyViewport(){
     world.classList.toggle('canvas-scaled', Math.abs(viewport.scale - 1) > 0.001);
     shell.style.backgroundSize = '24px 24px';
     shell.style.backgroundPosition = '0 0';
-    renderMinimap();
+    // 更新可见区域标记（带缓冲区），拖拽和滚屏时只渲染可见+缓冲区的节点
+    scheduleViewportCullingUpdate();
+    // 小地图包含全节点计算和 innerHTML 重建，合并到每个动画帧最多执行一次。
+    scheduleMinimapRender();
     scheduleSmartImageResolutionSync(world, 120);
+}
+// 视口裁剪（懒渲染）：只渲染当前视口+缓冲区以内的节点，视口外节点隐藏，减少光栅化开销
+// 缓冲区让节点在进入视口前已经渲染好，用户看不到进出切换，操作流畅不感知
+// 缓冲区自适应缩放：放大时缩小缓冲区，减少可见节点数，放大时缓冲区比例减小进一步降低负载
+function getVisibleViewportBoundsWithMargin(){
+    const rect = shell.getBoundingClientRect();
+    // 自适应缓冲区：scale越大（放大越多），缓冲区比例越小，减少可见节点数量
+    const marginRatio = Math.max(0.2, 0.5 / viewport.scale);
+    const marginX = rect.width * marginRatio;
+    const marginY = rect.height * marginRatio;
+    // 屏幕坐标 → 世界坐标转换
+    const invScale = 1 / viewport.scale;
+    const worldLeft = -viewport.x * invScale - marginX * invScale;
+    const worldTop = -viewport.y * invScale - marginY * invScale;
+    const worldRight = worldLeft + (rect.width + 2 * marginX) * invScale;
+    const worldBottom = worldTop + (rect.height + 2 * marginY) * invScale;
+    return {left: worldLeft, top: worldTop, right: worldRight, bottom: worldBottom};
+}
+
+// 空间网格分区索引：将节点按 512 像素网格分区，只检查视口附近网格内的节点
+// 对于大坐标+多节点场景，大大减少遍历次数，只检查可能可见的节点
+const GRID_CELL_SIZE = 512;
+let _spatialGrid = null;
+
+function rebuildSpatialGrid(){
+    _spatialGrid = new Map();
+    nodes.forEach(node => {
+        if(node.x === undefined || node.y === undefined) return;
+        const gx = Math.floor(node.x / GRID_CELL_SIZE);
+        const gy = Math.floor(node.y / GRID_CELL_SIZE);
+        const key = `${gx},${gy}`;
+        if(!_spatialGrid.has(key)){
+            _spatialGrid.set(key, []);
+        }
+        _spatialGrid.get(key).push(node);
+    });
+}
+
+let _viewportCullingTimeout = null;
+function scheduleViewportCullingUpdate(){
+    _nodeVisBounds = null; // 重置缓存，确保新节点也会被检查
+    // 防抖节流：短时间内多次调用只执行一次，避免滚动/缩放时频繁触发遍历
+    if(_viewportCullingTimeout){
+        clearTimeout(_viewportCullingTimeout);
+    }
+    _viewportCullingTimeout = setTimeout(() => {
+        _viewportCullingTimeout = null;
+        requestAnimationFrame(() => {
+            updateViewportCulling();
+        });
+    }, 10); // 10ms 防抖，合并密集调用
+}
+// 缓存 DOM 元素引用，避免每次遍历 80+ 节点都 querySelector
+let _nodeElCache = null;
+function getCachedNodeElements(){
+    if(_nodeElCache) return _nodeElCache;
+    _nodeElCache = new Map();
+    world.querySelectorAll('.image-node').forEach(el => {
+        if(el.dataset.id) _nodeElCache.set(el.dataset.id, el);
+    });
+    return _nodeElCache;
+}
+function updateViewportCulling(){
+    if(!world) return;
+    const bounds = getVisibleViewportBoundsWithMargin();
+    // 如果和上次范围一样，不需要更新
+    if(_nodeVisBounds &&
+       Math.abs(_nodeVisBounds.left - bounds.left) < 1 &&
+       Math.abs(_nodeVisBounds.top - bounds.top) < 1 &&
+       Math.abs(_nodeVisBounds.right - bounds.right) < 1 &&
+       Math.abs(_nodeVisBounds.bottom - bounds.bottom) < 1){
+        return;
+    }
+    _nodeVisBounds = bounds;
+    if(!_nodeVisCache) _nodeVisCache = new Map();
+    // 缓存 DOM 元素引用（render 后重建，平时复用）
+    const elCache = getCachedNodeElements();
+
+    // 使用空间网格索引：只计算视口范围内网格中的节点，减少遍历次数
+    if(_spatialGrid === null){
+        rebuildSpatialGrid();
+    }
+
+    // 计算视口覆盖哪些网格
+    const startGx = Math.floor(bounds.left / GRID_CELL_SIZE);
+    const endGx = Math.floor(bounds.right / GRID_CELL_SIZE);
+    const startGy = Math.floor(bounds.top / GRID_CELL_SIZE);
+    const endGy = Math.floor(bounds.bottom / GRID_CELL_SIZE);
+
+    // 记录本轮被检查过的节点 ID，用于后续隐藏移出视口的节点
+    const checkedIds = new Set();
+
+    // 只遍历视口覆盖网格中的节点，而不是全部节点
+    // 对于"倒霉大师"这种所有节点挤在 -35万 x 坐标的极端情况，原本每次遍历80+，现在只遍历当前可见区域的10-20个节点
+    for(let gx = startGx; gx <= endGx; gx++){
+        for(let gy = startGy; gy <= endGy; gy++){
+            const key = `${gx},${gy}`;
+            const cellNodes = _spatialGrid.get(key);
+            if(!cellNodes) continue;
+            cellNodes.forEach(node => {
+                if(node.x === undefined || node.y === undefined){
+                    checkedIds.add(node.id);
+                    _nodeVisCache.set(node.id, true);
+                    return;
+                }
+                checkedIds.add(node.id);
+                const nodeW = node.width || (node.images?.length ? 120 : 100) || 100;
+                const nodeH = node.height || 100;
+                const nodeRight = node.x + nodeW;
+                const nodeBottom = node.y + nodeH;
+                const isVisible = !(nodeRight < bounds.left || node.x > bounds.right || nodeBottom < bounds.top || node.y > bounds.bottom);
+                const prev = _nodeVisCache.get(node.id);
+                if(prev !== isVisible){
+                    _nodeVisCache.set(node.id, isVisible);
+                    const el = elCache.get(node.id);
+                    if(el) el.style.display = isVisible ? '' : 'none';
+                }
+            });
+        }
+    }
+
+    // 处理不在网格中（没有x/y）的节点，总是显示
+    nodes.forEach(node => {
+        if(node.x === undefined || node.y === undefined){
+            checkedIds.add(node.id);
+            const prev = _nodeVisCache.get(node.id);
+            if(prev !== true){
+                _nodeVisCache.set(node.id, true);
+                const el = elCache.get(node.id);
+                if(el) el.style.display = '';
+            }
+        }
+    });
+
+    // 隐藏已移出视口（不再被任何网格覆盖）的节点
+    // 当用户滚动/缩放后，之前可见的节点不在本轮网格检查范围内，需隐藏
+    _nodeVisCache.forEach((wasVisible, id) => {
+        if(wasVisible && !checkedIds.has(id)){
+            _nodeVisCache.set(id, false);
+            const el = elCache.get(id);
+            if(el) el.style.display = 'none';
+        }
+    });
 }
 function screenToWorld(event){
     const rect = shell.getBoundingClientRect();
@@ -2153,7 +2375,7 @@ function viewportCenter(){
     };
 }
 function renderMinimap(){
-    if(!minimapContent || !minimapViewport) return;
+    if(!minimapVisible || !minimapContent || !minimapViewport) return;
     smartArrangeBtn?.classList.toggle('visible', selectedNodeIds().length > 0);
     const width = minimapContent.clientWidth || 170;
     const height = minimapContent.clientHeight || 108;
@@ -3458,11 +3680,15 @@ function renderInlineCustomSizeFields(prefix=''){
         <input type="number" data-param="${hKey}" value="${escapeHtml(settings[hKey] || '')}" placeholder="${escapeHtml(tr('smart.height'))}">
     </div>`;
 }
+function qualityForResolution(resolution){
+    return resolution === '4k' ? 'high' : resolution === '2k' ? 'medium' : resolution === '1k' ? 'low' : 'auto';
+}
 function renderQualityControl(){
-    const value = settings.quality || 'auto';
-    const labels = {auto:tr('smart.qualityAuto'), low:tr('smart.qualityLow'), medium:tr('smart.qualityMid'), high:tr('smart.qualityHigh')};
+    const value = settings.quality || qualityForResolution(settings.resolution);
+    const labels = {low:tr('smart.qualityLow'), medium:tr('smart.qualityMid'), high:tr('smart.qualityHigh')};
+    const autoText = tr('smart.qualityAuto');
     return `<div class="smart-control quality-control">
-        <button class="smart-pill" type="button"><i data-lucide="sliders-horizontal"></i><span>${escapeHtml(labels[value] || value)}</span></button>
+        <button class="smart-pill" type="button"><i data-lucide="sliders-horizontal"></i><span>${escapeHtml(labels[value] || value || autoText)}</span></button>
         <div class="smart-popover compact-popover">
             <div class="smart-popover-title">${escapeHtml(tr('smart.quality'))}</div>
             <div class="seg-row">
@@ -3546,7 +3772,7 @@ const RH_KNOWN_FIELD_OPTIONS = {
     ratio:['1:1','16:9','9:16','21:9','9:21','4:3','3:4','4:5','5:4','3:2','2:3'],
     resolution:['1k','2k','4k','8k'],
     size:['512','768','1024','1280','1536','2048'],
-    quality:['low','medium','high','best'],
+    quality:['low','medium','high'],
     scheduler:['normal','karras','exponential','sgm_uniform','simple','ddim_uniform'],
     sampler:['euler','euler_ancestral','heun','dpm_2','dpm_2_ancestral','lms','dpmpp_2m','dpmpp_sde','ddim','uni_pc']
 };
@@ -6638,11 +6864,16 @@ function moveNodeElementsDuringDrag(){
             el.style.top = '0';
         }
     });
-    const active = selectedNode();
-    if(active && (dragState.group || [{id:dragState.id}]).some(item => item.id === active.id)){
-        positionComposerForNode(active);
+    // 拖拽期间跳过 composer 定位（鼠标松开后 composer 会自动跟随），减少布局重排开销
+    // const active = selectedNode();
+    // if(active && (dragState.group || [{id:dragState.id}]).some(item => item.id === active.id)){
+    //     positionComposerForNode(active);
+    // }
+    // 连线/小地图每 2 帧刷新一次，降低渲染开销，保持拖拽流畅
+    dragFrameCounter++;
+    if(dragFrameCounter % 2 === 0){
+        scheduleInteractionLayerRefresh();
     }
-    scheduleInteractionLayerRefresh();
 }
 function scheduleDragRender(){
     if(dragRafId) return;
@@ -6858,8 +7089,8 @@ function audioRefsOnly(refs){
 function thumbMediaHtml(img){
     if(isFileMediaItem(img) || isTextMediaItem(img)) return `<div class="media-thumb file-thumb" data-media-url="${escapeAttr(img.url || '')}" data-media-kind="${escapeAttr(mediaKindForItem(img))}"><i data-lucide="${isTextMediaItem(img) ? 'file-text' : 'file'}"></i><span>${escapeHtml(img.name || (isTextMediaItem(img) ? 'Text' : 'File'))}</span></div>`;
     if(isAudioMediaItem(img)) return `<div class="media-thumb audio-thumb" data-media-url="${escapeAttr(img.url || '')}" data-media-kind="audio"><i data-lucide="file-audio"></i><span>${escapeHtml(img.name || 'Audio')}</span></div>`;
-    if(isVideoMediaItem(img)) return `<div class="media-thumb video-thumb">${isInlineVideoActive(img) ? smartVideoPlayerHtml(img.url || '') : `${smartVideoPreviewHtml(img, 512, 'alt=""')}<button class="smart-video-play thumb-video-play" type="button" title="播放"><i data-lucide="play"></i></button>`}</div>`;
-    return smartPreviewImgHtml(img, 512, 'draggable="false"');
+    if(isVideoMediaItem(img)) return `<div class="media-thumb video-thumb">${isInlineVideoActive(img) ? smartVideoPlayerHtml(img.url || '') : `${smartVideoPreviewHtml(img, 384, 'alt=""')}<button class="smart-video-play thumb-video-play" type="button" title="播放"><i data-lucide="play"></i></button>`}</div>`;
+    return smartPreviewImgHtml(img, 384, 'draggable="false"');
 }
 function imageResolutionLabel(img){
     const w = Number(img?.natural_w || img?.width || img?.w || 0);
@@ -6929,8 +7160,8 @@ function updateImageResolutionBadgeElement(itemEl, img){
 function singleMediaHtml(img, w, h){
     if(isFileMediaItem(img) || isTextMediaItem(img)) return `<div class="node-img media-card media-file-card" style="width:${w}px;height:${h}px"><div class="media-card-icon"><i data-lucide="${isTextMediaItem(img) ? 'file-text' : 'file'}"></i></div><div class="media-card-title">${escapeHtml(img.name || (isTextMediaItem(img) ? 'Text' : 'File'))}</div><div class="media-card-sub">${isTextMediaItem(img) ? 'TEXT' : 'FILE'}</div></div>`;
     if(isAudioMediaItem(img)) return `<div class="node-img media-card media-audio-card" style="width:${w}px;height:${h}px"><div class="media-card-icon"><i data-lucide="file-audio"></i></div><div class="media-card-title">${escapeHtml(img.name || 'Audio')}</div><div class="media-card-sub">AUDIO</div><audio src="${escapeAttr(img.url || '')}" data-url="${escapeAttr(img.url || '')}" controls preload="metadata"></audio></div>`;
-    if(isVideoMediaItem(img)) return `<div class="node-img media-card media-video-card" style="width:${w}px;height:${h}px">${isInlineVideoActive(img) ? smartVideoPlayerHtml(img.url || '') : `${smartVideoPreviewHtml(img, 768, 'alt=""')}<button class="smart-video-play" type="button" title="播放"><i data-lucide="play"></i></button>`}</div>`;
-    return smartPreviewImgHtml(img, 768, `class="node-img" draggable="false" style="width:${w}px;height:${h}px"`);
+    if(isVideoMediaItem(img)) return `<div class="node-img media-card media-video-card" style="width:${w}px;height:${h}px">${isInlineVideoActive(img) ? smartVideoPlayerHtml(img.url || '') : `${smartVideoPreviewHtml(img, 384, 'alt=""')}<button class="smart-video-play" type="button" title="播放"><i data-lucide="play"></i></button>`}</div>`;
+    return smartPreviewImgHtml(img, 384, `class="node-img" draggable="false" style="width:${w}px;height:${h}px"`);
 }
 function smartNodeHasLiveMedia(node){
     return Boolean(node?.type === 'smart-minimax' || (!node?.pending && (node?.images || []).some(img => img?.url)));
@@ -7200,7 +7431,7 @@ function smartRunRequestMeta(run){
     };
     if(s.engine === 'modelscope') return {backend:'Modelscope', model:s.msgenModel || '', custom_model:s.msCustomModel || ''};
     if(run?.kind === 'video') return {provider_id:s.videoProvider || '', model:s.videoModel || '', duration:s.videoDuration || '', aspect_ratio:s.videoAspect || '', resolution:s.videoResolution || ''};
-    return {provider_id:s.provider_id || '', model:s.model || '', size:run?.size || '', quality:s.quality || '', n:s.count || 1};
+    return {provider_id:s.provider_id || '', model:s.model || '', size:run?.size || '', quality:s.quality || qualityForResolution(s.resolution), n:s.count || 1};
 }
 function smartRunSnapshot(node, prompt, refs=[], kind='image'){
     const settingsSnapshot = cloneSmartSettings(settings);
@@ -8699,6 +8930,10 @@ function render(){
     if(window.lucide) lucide.createIcons();
     measureSmartNodeImages();
     refreshRunTimerPills();
+    // 初次渲染后更新一次视口可见性，隐藏视口外节点
+    _nodeElCache = null; // 旧 DOM 已被重建，清除缓存
+    _spatialGrid = null; // 节点已重建，清除空间网格索引
+    scheduleViewportCullingUpdate();
 }
 function measureSmartNodeImages(){
     world.querySelectorAll('.image-node img,.image-node video').forEach(imgEl => {
@@ -16835,7 +17070,7 @@ async function runApiGeneration(prompt, refs, runSettings=settings){
         size:sizeForRun(runSettings),
         aspect_ratio:API_RATIO_VALUES[runSettings.ratio] || (runSettings.ratio === 'custom' ? String(runSettings.customRatio || '').trim() : ''),
         resolution:['1k','2k','4k'].includes(runSettings.resolution) ? runSettings.resolution : '',
-        quality:runSettings.quality || 'auto',
+        quality:runSettings.quality || qualityForResolution(runSettings.resolution),
         n:1,
         reference_images:imageRefsOnly(refs).slice(0, SMART_REFERENCE_IMAGE_MAX)
     };
@@ -18453,9 +18688,17 @@ window.onmousemove = e => {
         const dx = e.clientX - panState.startX;
         const dy = e.clientY - panState.startY;
         if(Math.abs(dx) + Math.abs(dy) > 3) didPan = true;
-        viewport.x = panState.ox + dx;
-        viewport.y = panState.oy + dy;
-        applyViewport();
+        panState.nextX = panState.ox + dx;
+        panState.nextY = panState.oy + dy;
+        if(!panState.frame){
+            panState.frame = requestAnimationFrame(() => {
+                if(!panState) return;
+                panState.frame = 0;
+                viewport.x = panState.nextX;
+                viewport.y = panState.nextY;
+                applyViewport();
+            });
+        }
         return;
     }
     if(!dragState) return;
@@ -18560,6 +18803,15 @@ window.onmouseup = e => {
         thumbDragState = null;
     }
     if(panState) {
+        if(panState.frame){
+            cancelAnimationFrame(panState.frame);
+            panState.frame = 0;
+        }
+        if(Number.isFinite(panState.nextX) && Number.isFinite(panState.nextY)){
+            viewport.x = panState.nextX;
+            viewport.y = panState.nextY;
+            applyViewport();
+        }
         panState = null;
         shell.classList.remove('panning');
         scheduleSave();
@@ -18688,6 +18940,15 @@ window.onmouseup = e => {
                 }
             }
         });
+        dragFrameCounter = 0;
+        // 拖拽结束后刷新可见区域（被拖节点可能移出/移入缓冲区）
+        _spatialGrid = null; // 节点位置已变，重建空间网格索引
+        scheduleViewportCullingUpdate();
+        // composer 松开鼠标后再定位一次，确保位置正确
+        const active = selectedNode();
+        if(active){
+            positionComposerForNode(active);
+        }
         dragState = null;
         scheduleSave();
         scheduleConnectionLayerRefresh();
@@ -19973,6 +20234,19 @@ function applyAngleToNode(){
 }
 
 window.onload = async () => {
+    initFpsCounter();
+    // 恢复小地图显示状态
+    const savedMinimap = localStorage.getItem('smart_canvas_minimap');
+    if(savedMinimap !== null){
+        minimapVisible = savedMinimap === '1';
+    }
+    if(minimapToggle){
+        minimapToggle.addEventListener('click', toggleMinimap);
+        minimapToggle.classList.toggle('active', minimapVisible);
+    }
+    if(minimap && !minimapVisible){
+        minimap.classList.add('hidden');
+    }
     applyTheme(localStorage.getItem('studio_theme') || localStorage.getItem('canvas_theme') || 'light');
     loadPromptPresets();
     loadPromptTemplateGroups();
