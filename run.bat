@@ -8,7 +8,7 @@ rem ComfyUI render wait limit: default 1200s, raised to 1 hour here
 set "COMFYUI_HISTORY_TIMEOUT=3600"
 
 echo Starting Infinite Canvas (main + MCP)...
-echo Main  : http://127.0.0.1:自定义端口/（端口由 data/port_config.json 控制）
+echo Main  : port is controlled by data/port_config.json
 echo MCP   : http://127.0.0.1:8765/sse
 echo Both services share this window.
 echo Press Ctrl+C or close the window to stop both services.

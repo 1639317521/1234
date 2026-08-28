@@ -1,10 +1,10 @@
 {
-  "version": "1.1.13",
-  "updated_at": "2026-08-28 20:10",
+  "version": "1.1.14",
+  "updated_at": "2026-08-28 20:20",
   "items": [
     {
       "type": "fix",
-      "text": "run.bat 不再负责打开浏览器，改由 main.py 启动后自动打开，端口始终与自定义端口一致。"
+      "text": "修复 run.bat 换行符和编码问题，确保在 Windows cmd.exe 下正常执行。"
     }
   ]
 }
