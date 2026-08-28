@@ -1,10 +1,10 @@
 {
-  "version": "1.1.12",
-  "updated_at": "2026-08-28 20:00",
+  "version": "1.1.13",
+  "updated_at": "2026-08-28 20:10",
   "items": [
     {
       "type": "fix",
-      "text": "run.bat 自动读取 data/port_config.json 中的自定义端口启动，修改端口后无需手动改 bat 文件。"
+      "text": "run.bat 不再负责打开浏览器，改由 main.py 启动后自动打开，端口始终与自定义端口一致。"
     }
   ]
 }

@@ -19989,7 +19989,16 @@ def generate_api(req: GenerateRequest):
     return generate(req)
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn, webbrowser, threading
+    # 服务启动后自动打开浏览器
+    def _open_browser():
+        import time
+        time.sleep(2)
+        try:
+            webbrowser.open(f"http://127.0.0.1:{PORT}/")
+        except Exception:
+            pass
+    threading.Thread(target=_open_browser, daemon=True).start()
     # 关闭服务端协议级 WebSocket ping：部分客户端（如 PS UXP 面板）不会自动回 pong，
     # 默认 20s ping/20s 超时会把这些连接每隔一会儿就踢掉造成"频繁断连"。
     # 客户端有自己的应用层心跳 + 断线重连兜底，这里禁用协议 ping 更稳。
