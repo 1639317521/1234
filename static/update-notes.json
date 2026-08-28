@@ -4,55 +4,7 @@
   "items": [
     {
       "type": "fix",
-      "text": "修复视频节点双击：改为打开预览弹窗（而非内联播放），并在弹窗中正确加载视频播放器。"
-    },
-    {
-      "type": "fix",
       "text": "修复更多设置折叠组 max-height 过小，端口设置按钮被 overflow:hidden 裁掉。"
-    },
-    {
-      "type": "fix",
-      "text": "github_token 改为运行时动态读取，修改 data/update_config.json 后无需重启服务即可生效。"
-    },
-    {
-      "type": "fix",
-      "text": "修复节点左右端口被裁剪，端口命中热区从 34px 扩大到 44px，拖线时更容易选中。"
-    },
-    {
-      "type": "feature",
-      "text": "新增 github_token 配置支持，解决 GitHub API rate limit 问题（限额 60→5000 次/小时）。"
-    },
-    {
-      "type": "feature",
-      "text": "新增 UI 端口设置功能：侧边栏「更多设置」→「端口设置」，修改端口后重启生效。端口配置存储在 data/port_config.json，在线更新不覆盖。"
-    },
-    {
-      "type": "update",
-      "text": "添加 WUCANVAS_PORT 环境变量支持，支持在 API/.env 中自定义端口。"
-    },
-    {
-      "type": "fix",
-      "text": "移除 quality UI 按钮，quality 完全由分辨率自动决定（1K→low, 2K→medium, 4K→high）。"
-    },
-    {
-      "type": "update",
-      "text": "quality 自动跟随分辨率，移除 'best' 无效选项。"
-    },
-    {
-      "type": "update",
-      "text": "图片分辨率映射对齐猛增画布方案：2K 非正方形比例大幅提升分辨率（16:9 从 2048x1152→3072x1728），4K 正方形从 4096x4096→2880x2880。"
-    },
-    {
-      "type": "performance",
-      "text": "画布平移改为按动画帧合并更新，小地图每帧最多重建一次，降低大画布快速拖动时的主线程负载。"
-    },
-    {
-      "type": "update",
-      "text": "建立递增语义版本号制度，更新时间仅作为附注，不再使用日期作为版本号。"
-    },
-    {
-      "type": "feature",
-      "text": "新增小地图开关按钮，点击可隐藏/显示小地图，状态持久化到 localStorage。"
     }
   ]
 }
