@@ -2111,8 +2111,10 @@ def github_json(url: str, use_etag_cache: bool = False):
         "Accept": "application/vnd.github+json",
         "User-Agent": "Infinite-Canvas-Updater",
     }
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    # 运行时从配置读取 Token，修改 update_config.json 后无需重启即可生效
+    _token = get_update_config().get("github_token", "") or GITHUB_TOKEN
+    if _token:
+        headers["Authorization"] = f"Bearer {_token}"
     cache_key = url
     if use_etag_cache and cache_key == GITHUB_TREE_URL:
         if GITHUB_TREE_CACHE["data"] and time.time() < GITHUB_TREE_CACHE["expires_at"]:
@@ -2138,7 +2140,11 @@ def github_json(url: str, use_etag_cache: bool = False):
         raise
 
 def github_bytes(url: str) -> bytes:
-    resp = github_get(url, headers={"User-Agent": "Infinite-Canvas-Updater"}, timeout=60)
+    headers = {"User-Agent": "Infinite-Canvas-Updater"}
+    _token = get_update_config().get("github_token", "") or GITHUB_TOKEN
+    if _token:
+        headers["Authorization"] = f"Bearer {_token}"
+    resp = github_get(url, headers=headers, timeout=60)
     return resp.content
 
 def download_github_update_files(files: List[str], staging_root: str) -> None:
