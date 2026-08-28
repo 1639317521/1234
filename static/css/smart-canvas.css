@@ -36,7 +36,7 @@ html[data-studio-scale="off"].studio-scale-managed .preview-modal {
 }
 .shell.panning { cursor:grabbing; }
 .shell.zoom-preview { cursor:crosshair; }
-.world { position:absolute; left:0; top:0; width:6000px; height:4000px; transform-origin:0 0; }
+.world { position:absolute; left:0; top:0; width:6000px; height:4000px; transform-origin:0 0; will-change: transform; }
 /* 画布缩放（非 1:1）时，关闭 world 内卡片的 backdrop-filter，避免合成层位图被缩放导致“参数设置”等组件发虚。
    底色本身接近不透明，关闭毛玻璃后观感几乎无差，但能在各浏览器下保持清晰。 */
 .world.canvas-scaled .image-node,
@@ -54,7 +54,7 @@ html[data-studio-scale="off"].studio-scale-managed .preview-modal {
 .smart-log-toggle:hover,.smart-shortcut-toggle:hover,.smart-workflow-toggle:hover { transform:translateY(-1px); border-color:var(--text); }
 .smart-log-toggle.active,.smart-shortcut-toggle.active,.smart-workflow-toggle.active { background:var(--strong); color:var(--strong-text); border-color:var(--strong); box-shadow:0 16px 38px var(--shadow); }
 .smart-log-toggle i,.smart-log-toggle svg,.smart-shortcut-toggle i,.smart-shortcut-toggle svg,.smart-workflow-toggle i,.smart-workflow-toggle svg { width:16px; height:16px; }
-.image-node { position:absolute; width:260px; min-height:178px; border-radius:16px; background:transparent; border:0; box-shadow:none; overflow:visible; user-select:none; cursor:move; }
+.image-node { position:absolute; width:260px; min-height:178px; border-radius:16px; background:transparent; border:0; box-shadow:none; overflow:visible; user-select:none; cursor:move; contain:layout style; }
 .image-node.dragging { will-change: transform; }
 body.smart-node-drag * { user-select:none !important; }
 body.smart-node-drag .image-node textarea,
@@ -747,8 +747,8 @@ video.node-img { object-fit:cover; background:#0f172a; }
 .node-port { position:absolute; top:50%; width:14px; height:14px; border-radius:50%; background:var(--card); border:1.8px solid var(--strong); transform:translateY(-50%); z-index:6; cursor:crosshair; opacity:0; pointer-events:none; transition:opacity .15s ease, background .15s ease, transform .15s ease, box-shadow .15s ease; box-shadow:0 4px 10px rgba(15,23,42,.18); }
 .node-port.port-in { left:-8px; }
 .node-port.port-out { right:-8px; }
-/* 扩大连线点可点/命中区域：视觉保持14px，命中热区加大到34px，便于拖线时选中 */
-.node-port::before { content:''; position:absolute; top:50%; left:50%; width:34px; height:34px; border-radius:50%; transform:translate(-50%,-50%); cursor:crosshair; }
+/* 扩大连线点可点/命中区域：视觉保持14px，命中热区加大到44px，便于拖线时选中 */
+.node-port::before { content:''; position:absolute; top:50%; left:50%; width:44px; height:44px; border-radius:50%; transform:translate(-50%,-50%); cursor:crosshair; }
 .image-node:hover .node-port, .image-node.selected .node-port, .image-node.port-hover .node-port { opacity:1; pointer-events:auto; }
 .shell.port-dragging .node-port { opacity:1; pointer-events:auto; }
 .node-port:hover, .node-port.is-active { background:var(--strong); transform:translateY(-50%) scale(1.22); box-shadow:0 6px 14px rgba(15,23,42,.26); }
@@ -1300,6 +1300,11 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
 .minimap-arrange-btn.visible { opacity:1; pointer-events:auto; }
 .minimap-arrange-btn:hover { color:var(--strong); background:var(--panel); transform:translateY(-1px); }
 .minimap-arrange-btn i,.minimap-arrange-btn svg { width:14px; height:14px; }
+.minimap-toggle-btn { position:absolute; right:22px; bottom:196px; z-index:9; height:32px; padding:0 10px; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:6px; color:var(--muted); background:var(--card); border:1px solid var(--line); box-shadow:0 10px 24px rgba(15,23,42,.13); cursor:pointer; font-size:11px; font-weight:850; transition:opacity .14s ease, color .14s ease, background .14s ease, transform .14s ease; }
+.minimap-toggle-btn:hover { color:var(--strong); background:var(--panel); transform:translateY(-1px); }
+.minimap-toggle-btn.active { color:var(--strong); background:var(--panel); border-color:var(--strong); }
+.minimap-toggle-btn i,.minimap-toggle-btn svg { width:14px; height:14px; }
+.smart-minimap.hidden { display:none; }
 .smart-minimap-content { position:absolute; inset:10px; border-radius:12px; overflow:hidden; background-image:radial-gradient(var(--grid) 1px, transparent 1px); background-size:12px 12px; opacity:.95; }
 .minimap-node { position:absolute; min-width:4px; min-height:4px; border-radius:3px; background:var(--strong); opacity:.8; }
 .smart-minimap-viewport { position:absolute; border-radius:8px; border:2px solid var(--strong); background:rgba(255,255,255,.12); }
@@ -1704,3 +1709,22 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
 .angle-preview-label { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.3em; color:#94a3b8; margin-bottom:6px; }
 .angle-preview-text { font-size:11px; line-height:1.5; color:#111827; word-break:break-all; }
 .theme-dark .angle-preview-text { color:#e5e9f0; }
+
+/* FPS 计数器 */
+.smart-fps-counter {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #00ff00;
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 4px;
+    z-index: 99999;
+    pointer-events: none;
+}
+.theme-dark .smart-fps-counter {
+    background: rgba(255, 255, 255, 0.2);
+}
