@@ -1775,3 +1775,11 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
     border:1px solid var(--line); background:var(--card); color:var(--text);
     font-size:13px; font-weight:600; cursor:pointer;
 }
+/* 批量设置弹窗内控件紧凑 */
+.smart-batch-settings-body .smart-control { margin-bottom:6px; }
+.smart-batch-settings-body .smart-pill { height:28px; max-width:110px; font-size:11px; }
+.smart-batch-settings-body .smart-pill i,
+.smart-batch-settings-body .smart-pill svg { width:12px !important; height:12px !important; }
+.smart-batch-settings-body .size-picker-row { gap:4px; }
+.smart-batch-settings-body .size-picker-row .smart-pill { max-width:72px; font-size:10px; }
+.smart-batch-settings-body .smart-control-label { font-size:10px; }
