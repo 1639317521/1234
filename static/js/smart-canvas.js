@@ -9367,7 +9367,8 @@ function openNodeContextMenu(node, e, convertible=true){
     });
     const selectionHtml = selectionIds.length > 1 ? `
         ${groupableIds.length ? '<button class="smart-node-context-item" type="button" data-selection-group="1"><i data-lucide="group"></i><span>打组</span></button>' : ''}
-        ${runnableIds.length ? `<button class="smart-node-context-item" type="button" data-selection-run="1"><i data-lucide="play"></i><span>批量运行（${runnableIds.length}）</span></button>` : ''}` : '';
+        ${runnableIds.length ? `<button class="smart-node-context-item" type="button" data-selection-run="1"><i data-lucide="play"></i><span>批量运行（${runnableIds.length}）</span></button>` : ''}
+        <button class="smart-node-context-item" type="button" data-batch-settings="1"><i data-lucide="settings-2"></i><span>批量设置</span></button>` : '';
     menu.innerHTML = `
         <div class="smart-node-context-head">${escapeHtml(selectionIds.length > 1 ? `已选 ${selectionIds.length} 个节点` : smartQueueNodeName(node))}</div>
         ${selectionHtml}
@@ -9391,6 +9392,12 @@ function openNodeContextMenu(node, e, convertible=true){
         toggleSmartQueuePanel(true);
         queueStart();
     };
+    const batchSettingsBtn = menu.querySelector('[data-batch-settings]');
+    if(batchSettingsBtn) batchSettingsBtn.onclick = e => {
+        e.stopPropagation();
+        closeNodeContextMenu();
+        openBatchSmartSettings();
+    };
     const convertBtn = menu.querySelector('[data-convert]');
     if(convertBtn) convertBtn.onclick = () => {
         const opts = menu.querySelector('.smart-node-convert-options');
@@ -9407,6 +9414,57 @@ function openNodeContextMenu(node, e, convertible=true){
 function closeNodeContextMenu(){
     smartNodeContextMenu?.remove();
     smartNodeContextMenu = null;
+}
+function openBatchSmartSettings(){
+    const ids = selectedNodeIds();
+    const targets = ids.map(id => nodes.find(n => n.id === id)).filter(Boolean);
+    if(targets.length < 2) return;
+    // 保存当前 settings 和 dynamicParams，Dialog 内替换
+    const savedSettings = cloneSmartSettings(settings);
+    const savedDynamicParams = dynamicParams;
+    // 用第一个节点的设置初始化 Dialog
+    const firstNode = targets[0];
+    const nodeSettings = smartSettingsForNode(firstNode);
+    Object.assign(settings, nodeSettings);
+    // 创建遮罩层
+    const overlay = document.createElement('div');
+    overlay.className = 'smart-batch-settings-overlay';
+    overlay.innerHTML = `<div class="smart-batch-settings-dialog">
+        <div class="smart-batch-settings-head"><span>批量设置（${targets.length} 个节点）</span><button type="button" class="smart-batch-settings-close" data-action="close"><i data-lucide="x"></i></button></div>
+        <div class="smart-batch-settings-body" id="batchSettingsBody"></div>
+        <div class="smart-batch-settings-hint">仅修改设置，不改变提示词、连线、位置或标题</div>
+        <div class="smart-batch-settings-foot">
+            <button type="button" class="smart-pill" data-action="cancel">取消</button>
+            <button type="button" class="smart-pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" data-action="apply">应用到全部</button>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    // 替换 dynamicParams 为 Dialog 容器，渲染设置控件
+    dynamicParams = overlay.querySelector('#batchSettingsBody');
+    renderDynamicParams();
+    // 绑定按钮事件
+    const cleanup = () => {
+        overlay.remove();
+        dynamicParams = savedDynamicParams;
+        Object.assign(settings, savedSettings);
+        renderDynamicParams();
+    };
+    overlay.querySelectorAll('[data-action]').forEach(btn => {
+        btn.onclick = () => {
+            if(btn.dataset.action === 'apply'){
+                const cleanSettings = settingsForStorage(settings);
+                targets.forEach(n => {
+                    if(!n.runSettings) n.runSettings = {};
+                    Object.assign(n.runSettings, cleanSettings);
+                });
+                scheduleSave();
+                if(typeof render === 'function') render();
+            }
+            cleanup();
+        };
+    });
+    overlay.addEventListener('click', e => { if(e.target === overlay) cleanup(); });
+    if(window.lucide) lucide.createIcons();
 }
 function convertSmartNode(node, targetType){
     if(!node || !targetType || targetType === node.type) return;
