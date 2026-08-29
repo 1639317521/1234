@@ -1,0 +1,5 @@
+@echo off
+rem ============================================
+rem  Infinite Canvas - Stop Service (main + mcp)
+rem ============================================
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='SilentlyContinue'; $cfg=Join-Path $PSScriptRoot 'data\port_config.json'; $port=3001; if(Test-Path $cfg){ try{ $v=(Get-Content $cfg -Raw|ConvertFrom-Json); if($v.port){ $port=[int]$v.port } } catch {} }; Write-Host ('Stop Infinite Canvas, port=' + $port); Get-NetTCPConnection -LocalPort $port -State Listen -EA SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue; Write-Host ('killed main pid ' + $_.OwningProcess) }; Get-CimInstance Win32_Process -EA SilentlyContinue | Where-Object { $_.Name -in @('python.exe','pythonw.exe') -and $_.CommandLine -match 'mcp_server\.py' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue; Write-Host ('killed mcp pid ' + $_.ProcessId) }; Start-Sleep -Milliseconds 300; Write-Host 'done'"

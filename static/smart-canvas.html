@@ -206,6 +206,12 @@
             <div id="assetDropZone" class="asset-drop-zone" data-i18n="smart.assetDropHint">把画布图片拖到这里保存到当前文件夹</div>
             <div id="assetGrid" class="asset-grid"></div>
             <div id="workflowEmpty" class="workflow-empty" style="display:none" data-i18n="smart.assetWorkflowEmpty">工作流资产先预留在这里，后续接入。</div>
+            <div class="asset-footer">
+                <span class="asset-size-label" title="缩略图大小"><i data-lucide="layout-grid"></i><span>缩略图</span></span>
+                <input id="assetThumbSize" class="asset-size-slider" type="range" min="56" max="220" step="4" value="120">
+                <span class="asset-size-value">120</span>
+            </div>
+            <div id="assetResizeHandle" class="asset-resize-handle" title="拖动调整面板宽度"></div>
         </aside>
         <aside id="smartQueuePanel" class="smart-queue-panel">
             <div class="smart-queue-head">

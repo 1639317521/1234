@@ -6041,7 +6041,7 @@ function renderAssetLibrary(){
     if(assetAddCategoryBtn) assetAddCategoryBtn.disabled = Boolean(smartClass);
     if(assetRenameCategoryBtn) assetRenameCategoryBtn.disabled = !cat || Boolean(smartClass) || (localMode && (cat.id === '__root__' || !cat.id));
     assetGrid.innerHTML = items.length ? items.map(item => `
-        <div class="asset-item ${workflowMode ? 'workflow-asset-item' : ''}" draggable="${workflowMode ? 'false' : 'true'}" data-asset-id="${escapeHtml(item.id)}" data-url="${escapeHtml(item.url)}" data-name="${escapeHtml(item.name || 'asset')}" data-kind="${escapeHtml(assetMediaKind(item))}">
+        <div class="asset-item ${workflowMode ? 'workflow-asset-item' : ''} ${assetMultiSelected.has(item.id) ? 'asset-selected' : ''}" draggable="${workflowMode ? 'false' : 'true'}" data-asset-id="${escapeHtml(item.id)}" data-url="${escapeHtml(item.url)}" data-name="${escapeHtml(item.name || 'asset')}" data-kind="${escapeHtml(assetMediaKind(item))}">
             ${assetThumbHtml(item)}
             <div class="asset-meta">
                 <span class="asset-name" ${localMode ? `data-rename-local-asset="${escapeHtml(item.id)}"` : ''} title="${escapeHtml(item.name || '')}">${escapeHtml(item.name || 'asset')}</span>
@@ -6232,7 +6232,140 @@ function beginAssetInlineRename(assetId){
     input.addEventListener('click', event => event.stopPropagation());
     input.addEventListener('blur', () => finish(true));
 }
+let assetMultiSelected = new Set(); // 资产库多选待投放的 asset id 集合
+function toggleAssetMultiSelect(assetId, additive){
+    if(!assetId) return;
+    if(additive){
+        if(assetMultiSelected.has(assetId)) assetMultiSelected.delete(assetId);
+        else assetMultiSelected.add(assetId);
+    } else {
+        assetMultiSelected = assetMultiSelected.has(assetId) ? new Set() : new Set([assetId]);
+    }
+    assetGrid?.querySelectorAll?.('.asset-item')?.forEach?.(card => card.classList.toggle('asset-selected', assetMultiSelected.has(card.dataset.assetId)));
+}
+function clearAssetMultiSelect(){
+    if(!assetMultiSelected.size) return;
+    assetMultiSelected = new Set();
+    assetGrid?.querySelectorAll?.('.asset-item')?.forEach?.(card => card.classList.remove('asset-selected'));
+}
+let appAssetThumbSize = 120;
+function initAssetPanelResize(){
+    try {
+        const w = parseInt(localStorage.getItem('smart_asset_panel_width') || '', 10);
+        if(Number.isFinite(w) && w >= 200) assetPanel.style.width = `${Math.min(w, window.innerWidth - 80)}px`;
+    } catch(e){}
+    try {
+        const t = parseInt(localStorage.getItem('smart_asset_thumb_size') || '', 10);
+        if(Number.isFinite(t) && t >= 56 && t <= 220) appAssetThumbSize = t;
+    } catch(e){}
+    const setThumb = size => {
+        appAssetThumbSize = size;
+        assetGrid.style.setProperty('--asset-thumb', `${size}px`);
+        const slider = document.getElementById('assetThumbSize');
+        if(slider) slider.value = size;
+        const txt = document.querySelector('#assetPanel .asset-size-value');
+        if(txt) txt.textContent = size;
+        try { localStorage.setItem('smart_asset_thumb_size', String(size)); } catch(err){}
+    };
+    const slider = document.getElementById('assetThumbSize');
+    if(slider){
+        setThumb(appAssetThumbSize);
+        slider.addEventListener('input', () => setThumb(parseInt(slider.value, 10) || 120));
+    }
+    const handle = document.getElementById('assetResizeHandle');
+    if(handle){
+        handle.addEventListener('mousedown', e => {
+            if(e.button !== 0) return;
+            e.preventDefault(); e.stopPropagation();
+            const startX = e.clientX;
+            const startW = assetPanel.getBoundingClientRect().width;
+            const move = ev => {
+                let w = Math.min(560, Math.max(200, startW - (ev.clientX - startX)));
+                w = Math.min(w, window.innerWidth - 80);
+                assetPanel.style.width = `${w}px`;
+                try { localStorage.setItem('smart_asset_panel_width', String(w)); } catch(err){}
+            };
+            const up = () => {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+                document.body.classList.remove('asset-resizing');
+            };
+            document.body.classList.add('asset-resizing');
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', up);
+        });
+    }
+}
+function ensureAssetMarqueeBox(){
+    if(!window.__assetMarqueeBox){
+        const el = document.createElement('div');
+        el.className = 'selection-box';
+        el.style.position = 'fixed';
+        el.style.zIndex = '9000';
+        el.style.display = 'none';
+        document.body.appendChild(el);
+        window.__assetMarqueeBox = el;
+    }
+    return window.__assetMarqueeBox;
+}
+let assetMarqueeState = null;
+function onAssetGridMouseDown(e){
+    if(e.button !== 0) return;
+    if(e.target.closest('.asset-item,.asset-mini-btn,input,button,select,.asset-rename-input')) return;
+    e.preventDefault();
+    const box = ensureAssetMarqueeBox();
+    assetMarqueeState = {sx:e.clientX, sy:e.clientY, cx:e.clientX, cy:e.clientY, box};
+    box.style.display = 'block';
+    assetMarqueeRender();
+    const move = ev => {
+        if(!assetMarqueeState) return;
+        assetMarqueeState.cx = ev.clientX;
+        assetMarqueeState.cy = ev.clientY;
+        assetMarqueeRender();
+    };
+    const up = ev => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        finishAssetMarquee(ev);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+}
+function assetMarqueeRender(){
+    if(!assetMarqueeState) return;
+    const {sx, sy, cx, cy, box} = assetMarqueeState;
+    const x = Math.min(sx, cx), y = Math.min(sy, cy);
+    box.style.left = `${x}px`;
+    box.style.top = `${y}px`;
+    box.style.width = `${Math.abs(cx - sx)}px`;
+    box.style.height = `${Math.abs(cy - sy)}px`;
+}
+function finishAssetMarquee(e){
+    if(!assetMarqueeState) return;
+    const {sx, sy, box} = assetMarqueeState;
+    assetMarqueeState = null;
+    box.style.display = 'none';
+    const x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
+    const w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
+    if(w < 6 && h < 6) return; // 视为单击空白，忽略
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    const next = additive ? new Set(assetMultiSelected) : new Set();
+    assetGrid.querySelectorAll('.asset-item').forEach(card => {
+        const r = card.getBoundingClientRect();
+        if(r.left < x + w && r.right > x && r.top < y + h && r.bottom > y) next.add(card.dataset.assetId);
+    });
+    assetMultiSelected = next;
+    assetGrid.querySelectorAll('.asset-item').forEach(card => card.classList.toggle('asset-selected', assetMultiSelected.has(card.dataset.assetId)));
+}
 function bindAssetItemEvents(){
+    if(!assetGrid.__marqueeBound){
+        assetGrid.__marqueeBound = true;
+        assetGrid.addEventListener('mousedown', onAssetGridMouseDown);
+    }
+    if(!assetPanel.__resizeInit){
+        assetPanel.__resizeInit = true;
+        initAssetPanelResize();
+    }
     assetGrid.querySelectorAll('.asset-item').forEach(el => {
         const thumb = el.querySelector('.asset-thumb');
         // 悬浮预览延迟显示：滚动时缩略图会从光标下快速划过、连发 mouseenter，立即加载大图会卡。延迟后只在
@@ -6245,12 +6378,28 @@ function bindAssetItemEvents(){
         });
         thumb?.addEventListener('mousemove', e => positionAssetHoverPreview(e));
         thumb?.addEventListener('mouseleave', () => { clearTimeout(assetHoverTimer); hideAssetHoverPreview(); });
+        el.addEventListener('click', e => {
+            if(e.target.closest('.asset-mini-btn,input,button,.asset-rename-input')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            toggleAssetMultiSelect(el.dataset.assetId, e.ctrlKey || e.metaKey || e.shiftKey);
+        });
         el.addEventListener('dragstart', e => {
             hideAssetHoverPreview();
             e.dataTransfer.effectAllowed = 'copy';
             const item = (activeAssetCategory()?.items || []).find(x => x.id === el.dataset.assetId);
             const asset = assetNodeImageFromItem(item || {url:el.dataset.url, name:el.dataset.name, kind:el.dataset.kind});
-            e.dataTransfer.setData('application/x-smart-asset', JSON.stringify(asset));
+            // 多选整批投放：若已在资产库选中多张，连同当前这张整批拖出
+            let targets = [];
+            if(assetMultiSelected.size){
+                targets = (activeAssetCategory()?.items || []).filter(r => assetMultiSelected.has(r.id) && r && (r.url || r.data));
+                if(!assetMultiSelected.has(el.dataset.assetId) && item) targets.push(item);
+            }
+            const batch = (targets.length ? targets : [item])
+                .map(r => assetNodeImageFromItem(r || {url:el.dataset.url, name:el.dataset.name, kind:el.dataset.kind}))
+                .filter(a => a && a.url);
+            e.dataTransfer.setData('application/x-smart-assets', JSON.stringify(batch));
+            e.dataTransfer.setData('application/x-smart-asset', JSON.stringify(batch.length === 1 ? batch[0] : asset));
             e.dataTransfer.setData('text/plain', asset.url || el.dataset.url || '');
         });
         el.addEventListener('dblclick', e => {
@@ -6786,6 +6935,29 @@ function pasteAssetsFromInbox(){
     scheduleSave();
     toast(`已粘贴 ${created.length} 个素材到画布`);
     return true;
+}
+function layoutDroppedSmartAssets(assets, point){
+    if(!Array.isArray(assets) || !assets.length) return;
+    const count = assets.length;
+    const cols = Math.max(1, Math.min(count, Math.ceil(Math.sqrt(count))));
+    const first = assetNodeImageFromItem(assets[0]);
+    const firstLayout = imageLayout([first], mediaNodeDefaultScale({type:'smart-image', images:[first]}), {type:'smart-image', images:[first]});
+    const cellW = Math.max(firstLayout.width || 280, 200) + 40;
+    const cellH = Math.max(firstLayout.height || 200, 140) + 40;
+    const startX = (point?.x || 0) - (cols - 1) * cellW / 2;
+    const startY = (point?.y || 0) - (Math.ceil(count / cols) - 1) * cellH / 2;
+    const created = [];
+    assets.forEach((asset, i) => {
+        const img = assetNodeImageFromItem(asset);
+        const assetName = String(asset.name || '').trim().replace(/\.[^./\\]+$/, '');
+        const r = Math.floor(i / cols), c = i % cols;
+        const node = createImageNodeAt({x: startX + c * cellW, y: startY + r * cellH}, [img], {skipUndo:true, select:false, title:assetName});
+        if(node) created.push(node.id);
+    });
+    selectedId = created.length === 1 ? created[0] : '';
+    selectedIds = created.length > 1 ? created : [];
+    selectedImage = {nodeId:'', index:-1};
+    scheduleSave();
 }
 function duplicateForAltDrag(node, preserveConnections=false){
     const ids = (isNodeSelected(node.id) ? selectedNodeIds() : [node.id]);
@@ -19243,17 +19415,25 @@ shell.ondrop = async e => {
     if(e.target.closest('.image-node')) return;
     const p = screenToWorld(e);
     const assetRaw = e.dataTransfer.getData('application/x-smart-asset');
-    if(assetRaw){
+    const assetBatchRaw = e.dataTransfer.getData('application/x-smart-assets');
+    if(assetBatchRaw || assetRaw){
         try {
-            const asset = JSON.parse(assetRaw);
-            if(asset?.url) {
+            let assets = [];
+            if(assetBatchRaw){ const arr = JSON.parse(assetBatchRaw); if(Array.isArray(arr)) assets = arr; }
+            if(!assets.length && assetRaw){ const a = JSON.parse(assetRaw); if(a && a.url) assets = [a]; }
+            if(assets.length){
                 pushUndo();
-                // 节点标题跟随资产库素材名（去掉扩展名），保持画布节点与资产库一致。
-                // 必须在 createImageNodeAt 之前把标题算好，经 options.title 传入——
-                // createImageNodeAt 内部会 render()，之后再改 node.title 界面不会更新
-                // （render 已用旧标题建好 DOM），也没有触发持久化保存。
-                const assetName = String(asset.name || '').trim().replace(/\.[^./\\]+$/, '');
-                createImageNodeAt(p, [assetNodeImageFromItem(asset)], {skipUndo:true, title:assetName});
+                if(assets.length === 1){
+                    const asset = assets[0];
+                    if(asset?.url){
+                        const assetName = String(asset.name || '').trim().replace(/\.[^./\\]+$/, '');
+                        createImageNodeAt(p, [assetNodeImageFromItem(asset)], {skipUndo:true, title:assetName});
+                    }
+                } else {
+                    // 多选整批投放：按首张节点尺寸网格平铺、排列整齐
+                    layoutDroppedSmartAssets(assets, p);
+                }
+                clearAssetMultiSelect();
             }
             return;
         } catch {}
