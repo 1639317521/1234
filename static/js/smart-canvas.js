@@ -9434,8 +9434,8 @@ function openBatchSmartSettings(){
         <div class="smart-batch-settings-body" id="batchSettingsBody"></div>
         <div class="smart-batch-settings-hint">仅修改设置，不改变提示词、连线、位置或标题</div>
         <div class="smart-batch-settings-foot">
-            <button type="button" class="smart-pill" data-action="cancel">取消</button>
-            <button type="button" class="smart-pill" style="background:var(--accent);color:#fff;border-color:var(--accent)" data-action="apply">应用到全部</button>
+            <button type="button" class="batch-btn" data-action="cancel">取消</button>
+            <button type="button" class="batch-btn primary" data-action="apply">应用到全部</button>
         </div>
     </div>`;
     document.body.appendChild(overlay);
