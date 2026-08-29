@@ -1736,7 +1736,7 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
 }
 .smart-batch-settings-dialog {
     background:var(--panel); border:1px solid var(--line); border-radius:16px;
-    width:420px; max-height:80vh; display:flex; flex-direction:column;
+    width:480px; max-height:90vh; display:flex; flex-direction:column;
     box-shadow:0 24px 60px rgba(0,0,0,.25);
 }
 .smart-batch-settings-head {
@@ -1749,7 +1749,8 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
 }
 .smart-batch-settings-close:hover { color:var(--text); }
 .smart-batch-settings-body {
-    padding:14px 18px; overflow-y:auto; flex:1;
+    padding:14px 18px; overflow:visible; flex:1;
+    position:relative;
 }
 .smart-batch-settings-hint {
     padding:0 18px 10px; font-size:10px; color:var(--faint);
@@ -1777,12 +1778,12 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
 }
 /* 批量设置弹窗内控件水平排列 + 紧凑 */
 .smart-batch-settings-body .batch-engine-row { width:100%; }
-.smart-batch-settings-body #batchDynamicParams { display:flex; flex-wrap:wrap; gap:6px; align-items:flex-start; width:100%; }
+.smart-batch-settings-body #batchDynamicParams { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start; width:100%; }
 .smart-batch-settings-body .smart-control { margin:0; flex:0 0 auto; min-width:0; }
-.smart-batch-settings-body .smart-pill { height:24px; max-width:90px; font-size:9px; padding:0 8px; }
-.smart-batch-settings-body .smart-pill span { font-size:9px; }
+.smart-batch-settings-body .smart-pill { height:28px; max-width:110px; font-size:11px; padding:0 10px; }
+.smart-batch-settings-body .smart-pill span { font-size:11px; }
 .smart-batch-settings-body .smart-pill i,
-.smart-batch-settings-body .smart-pill svg { width:10px !important; height:10px !important; }
-.smart-batch-settings-body .size-picker-row { gap:2px; }
-.smart-batch-settings-body .size-picker-row .smart-pill { max-width:52px; font-size:8px; height:22px; padding:0 5px; }
-.smart-batch-settings-body .smart-control-label { font-size:8px; }
+.smart-batch-settings-body .smart-pill svg { width:12px !important; height:12px !important; }
+.smart-batch-settings-body .size-picker-row { gap:4px; }
+.smart-batch-settings-body .size-picker-row .smart-pill { max-width:60px; font-size:10px; height:26px; padding:0 6px; }
+.smart-batch-settings-body .smart-control-label { font-size:10px; }
