@@ -141,6 +141,21 @@ class ConnectionManager:
                 print(f"Broadcast canvas error: {e}")
                 self.active_connections.remove(connection)
 
+    async def broadcast_mcp_nodes_updated(self, canvas_id: str, nodes: list, client_id: str = ""):
+        """MCP 节点变更轻量广播：只推送变动的节点，前端原地更新，不触发全量重载。"""
+        data = json.dumps({
+            "type": "mcp_nodes_updated",
+            "canvas_id": canvas_id,
+            "nodes": nodes,
+            "client_id": client_id or "",
+        })
+        for connection in self.active_connections[:]:
+            try:
+                await connection.send_text(data)
+            except Exception as e:
+                print(f"Broadcast mcp nodes error: {e}")
+                self.active_connections.remove(connection)
+
     async def broadcast_asset_library_updated(self, updated_at: int = 0):
         data = json.dumps({
             "type": "asset_library_updated",
@@ -18232,6 +18247,343 @@ async def update_mcp_prompt_node(payload: McpPromptNodeUpdateRequest):
     save_canvas(canvas)
     await manager.broadcast_canvas_updated(payload.canvas_id, int(canvas.get("updated_at") or now_ms()), "mcp")
     return {"node": node, "updated_at": int(canvas.get("updated_at") or now_ms())}
+
+# --- 画布 MCP 多选：前端上报多个选中节点 ---
+MCP_MULTI_SELECTION = {}  # canvas_id -> {"node_ids": [str], "x": float, "y": float, "at": int}
+
+class McpMultiSelectionRequest(BaseModel):
+    node_ids: List[str] = []
+    x: float = 0.0
+    y: float = 0.0
+
+class McpBatchUpdateRequest(BaseModel):
+    canvas_id: str
+    node_ids: List[str]
+    updates: Dict[str, Any] = {}
+    token: str = ""
+
+class McpBatchCreateNodeItem(BaseModel):
+    text: str = ""
+    title: str = ""
+    upstream: str = ""  # 可选：指定上游节点名称，用于自动连线
+
+class McpBatchCreateRequest(BaseModel):
+    canvas_id: str
+    nodes: List[McpBatchCreateNodeItem]
+    auto_connect: bool = False
+    token: str = ""
+
+@app.put("/api/canvases/{canvas_id}/mcp-multi-selection")
+async def report_mcp_multi_selection(canvas_id: str, payload: McpMultiSelectionRequest):
+    """前端上报：当前选中的多个节点 + 可视区中心世界坐标（用于 MCP 批量操作定位）。"""
+    MCP_MULTI_SELECTION[canvas_id] = {
+        "node_ids": payload.node_ids or [],
+        "x": float(payload.x or 0),
+        "y": float(payload.y or 0),
+        "at": now_ms(),
+    }
+    return {"ok": True}
+
+@app.get("/api/canvases/{canvas_id}/mcp-multi-selection")
+async def get_mcp_multi_selection(canvas_id: str):
+    """返回该画布最近上报的多个选中节点详情，供 mcp_server 的 get_selected_nodes 读取。"""
+    info = MCP_MULTI_SELECTION.get(canvas_id) or {}
+    node_ids = info.get("node_ids") or []
+    nodes = []
+    if node_ids:
+        canvas = load_canvas(canvas_id)
+        all_nodes = canvas.get("nodes") or []
+        id_set = set(node_ids)
+        nodes = [n for n in all_nodes if n.get("id") in id_set]
+    return {"canvas_id": canvas_id, "node_ids": node_ids, "nodes": nodes,
+            "x": info.get("x"), "y": info.get("y"), "at": info.get("at")}
+
+def _mcp_deep_merge(target, source):
+    """递归合并 source 到 target（支持嵌套 dict）。"""
+    for key, value in source.items():
+        if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+            _mcp_deep_merge(target[key], value)
+        else:
+            target[key] = value
+    return target
+
+def _mcp_smart_title(text):
+    """从提示词文本提取标题。"""
+    m = re.search(r'角色(?:为|是)\s*([^，,。;；!！?？\n]+)', text)
+    if m:
+        return m.group(1).strip()[:12] or 'Image'
+    seg = re.split(r'[，,。;；!！?？\n]', text.strip())[0]
+    seg = re.sub(r'\s+', '', seg)
+    return seg[:12] or '提示词'
+
+def _mcp_build_name_index(nodes):
+    """构建节点名称索引：displayTitle / title -> node。"""
+    idx = {}
+    for n in nodes:
+        for key in ("displayTitle", "title"):
+            val = n.get(key)
+            if val and val.strip():
+                idx[val.strip().lower()] = n
+    return idx
+
+def _mcp_match_existing_nodes(text, name_index):
+    """从文本中匹配现有节点名称。返回匹配到的节点列表（去重）。"""
+    text_lower = text.lower()
+    matched = []
+    seen_ids = set()
+    for name, node in name_index.items():
+        if name in text_lower and node.get("id") not in seen_ids:
+            matched.append(node)
+            seen_ids.add(node["id"])
+    return matched
+
+# --- 智能画布节点布局常量与辅助函数 ---
+_MCP_BOX_W = 320   # 节点宽度
+_MCP_BOX_H = 280   # smart-image 节点高度（与 generator 一致）
+_MCP_STEP_X = 380  # 水平间距
+_MCP_STEP_Y = 240  # 垂直间距
+
+def _mcp_existing_boxes(nodes):
+    """构建现有节点包围盒列表 [(x, y, w, h), ...]。"""
+    boxes = []
+    for n in nodes:
+        try:
+            boxes.append((float(n.get('x') or 0), float(n.get('y') or 0), _MCP_BOX_W, _MCP_BOX_H))
+        except Exception:
+            pass
+    return boxes
+
+def _mcp_overlaps(b, boxes):
+    """检查包围盒 b 是否与 boxes 中任意一个重叠。"""
+    bx, by, bw, bh = b
+    for x, y, w, h in boxes:
+        if bx < x + w and x < bx + bw and by < y + h and y < by + bh:
+            return True
+    return False
+
+def _mcp_find_free_spot(boxes, cx, cy):
+    """从 cx,cy 附近找一个不与任何包围盒重叠的 spot。"""
+    col = 0
+    for _ in range(40):
+        px, py = cx - 150 + col * _MCP_STEP_X, cy
+        while _mcp_overlaps((px, py, _MCP_BOX_W, _MCP_BOX_H), boxes):
+            py += _MCP_STEP_Y
+            if py > cy + 12 * _MCP_STEP_Y:
+                break
+        if not _mcp_overlaps((px, py, _MCP_BOX_W, _MCP_BOX_H), boxes):
+            return px, py
+        col += 1
+    return cx - 150, cy
+
+def _mcp_latest_node_anchor(nodes):
+    """无有效视口时的回退锚点：现有节点包围盒右侧居中。"""
+    if not nodes:
+        return 200.0, 300.0
+    xs = [float(n.get('x') or 0) for n in nodes]
+    ys = [float(n.get('y') or 0) for n in nodes]
+    return max(xs) + _MCP_BOX_W + 40.0, (min(ys) + max(ys)) / 2.0
+
+@app.post("/api/mcp/nodes/batch-update")
+async def batch_update_mcp_nodes(payload: McpBatchUpdateRequest):
+    """批量更新节点字段：对指定 node_ids 统一应用 updates 中的值。"""
+    from hmac import compare_digest
+    if not compare_digest(str(payload.token or ""), MCP_API_TOKEN):
+        raise HTTPException(status_code=401, detail="MCP Token 无效")
+    canvas = load_canvas(payload.canvas_id)
+    id_set = set(payload.node_ids or [])
+    if not id_set:
+        return {"ok": True, "updated_count": 0, "nodes": []}
+    updated = []
+    for node in (canvas.get("nodes") or []):
+        if node.get("id") in id_set:
+            _mcp_deep_merge(node, payload.updates)
+            updated.append(node)
+    if not updated:
+        raise HTTPException(status_code=404, detail="未找到匹配的节点")
+    save_canvas(canvas)
+    await manager.broadcast_mcp_nodes_updated(payload.canvas_id, updated, "mcp")
+    return {"ok": True, "updated_count": len(updated), "nodes": updated}
+
+@app.post("/api/mcp/nodes/batch-create")
+async def batch_create_mcp_nodes(payload: McpBatchCreateRequest):
+    """批量创建 smart-image 节点，可选自动连线到上游节点。"""
+    from hmac import compare_digest
+    if not compare_digest(str(payload.token or ""), MCP_API_TOKEN):
+        raise HTTPException(status_code=401, detail="MCP Token 无效")
+    canvas = load_canvas(payload.canvas_id)
+    if canvas.get("kind") != "smart":
+        raise HTTPException(status_code=400, detail="仅支持智能画布（kind=smart）")
+
+    existing_nodes = list(canvas.get("nodes") or [])
+    existing_conns = list(canvas.get("connections") or [])
+    now = now_ms()
+    created = []
+    new_connections = []
+    unmatched = []
+
+    # 获取视口中心作为默认落点
+    info = MCP_SELECTION.get(payload.canvas_id) or {}
+    base_x = float(info.get("x") or 200)
+    base_y = float(info.get("y") or 300)
+    # 视口异常时回退到现有节点右侧
+    if not (0.001 <= abs(base_x) <= 100000 and 0.001 <= abs(base_y) <= 100000):
+        base_x, base_y = _mcp_latest_node_anchor(existing_nodes)
+
+    # 构建现有节点包围盒（用于避让）
+    boxes = _mcp_existing_boxes(existing_nodes)
+
+    # 从现有 smart-image 节点继承默认 runSettings
+    rs = {
+        "engine": "api", "apiKind": "image", "provider_id": "custom-api-4",
+        "model": "gpt-image-2", "ratio": "wide", "resolution": "4k",
+        "count": 1, "quality": "high",
+    }
+    for n in existing_nodes:
+        if n.get("type") == "smart-image" and isinstance(n.get("runSettings"), dict):
+            s = n["runSettings"]
+            for k in ("engine", "apiKind", "provider_id", "model", "quality"):
+                if k in s:
+                    rs[k] = s[k]
+            break
+
+    # 构建现有节点名称索引（用于 auto_connect 匹配）
+    name_index = _mcp_build_name_index(existing_nodes)
+
+    for i, ndef in enumerate(payload.nodes):
+        text = ndef.text or ""
+        title = ndef.title or _mcp_smart_title(text)
+        node_id = "smart_" + uuid.uuid4().hex
+        # 智能避让布局
+        spot_cx = base_x + (i % 2) * (_MCP_STEP_X // 2)
+        spot_cy = base_y + (i // 2) * (_MCP_BOX_H + 80)
+        px, py = _mcp_find_free_spot(boxes, spot_cx, spot_cy)
+        node = {
+            "id": node_id, "type": "smart-image",
+            "x": px, "y": py,
+            "title": title, "displayTitle": title,
+            "images": [], "created_at": now, "scale": 1,
+            "runSettings": dict(rs),
+            "promptDraftText": text, "promptDraftHtml": text,
+        }
+        created.append(node)
+        existing_nodes.append(node)
+        # 新节点加入包围盒，后续节点继续避让
+        boxes.append((px, py, _MCP_BOX_W, _MCP_BOX_H))
+
+        # 自动连线
+        if payload.auto_connect:
+            if ndef.upstream:
+                # 用户指定了上游名称
+                up_name = ndef.upstream.strip().lower()
+                up_node = name_index.get(up_name)
+                if up_node:
+                    conn = {"id": "c_" + uuid.uuid4().hex[:8], "from": up_node["id"], "to": node_id, "kind": "flow"}
+                    new_connections.append(conn)
+                    existing_conns.append(conn)
+                else:
+                    unmatched.append(ndef.upstream)
+            else:
+                # 从文本中自动匹配
+                matched = _mcp_match_existing_nodes(text, name_index)
+                for m in matched:
+                    conn = {"id": "c_" + uuid.uuid4().hex[:8], "from": m["id"], "to": node_id, "kind": "flow"}
+                    new_connections.append(conn)
+                    existing_conns.append(conn)
+
+    canvas["nodes"] = existing_nodes
+    canvas["connections"] = existing_conns
+    save_canvas(canvas)
+    await manager.broadcast_mcp_nodes_updated(payload.canvas_id, created, "mcp")
+
+    result = {
+        "ok": True,
+        "created": [{"id": n["id"], "title": n["displayTitle"], "type": n["type"]} for n in created],
+        "connections": [{"from": c["from"], "to": c["to"]} for c in new_connections],
+        "total_nodes": len(existing_nodes),
+    }
+    if unmatched:
+        result["unmatched_upstream"] = unmatched
+        result["hint"] = "以下上游节点名称未匹配到现有节点，请检查名称是否正确：" + "、".join(unmatched)
+    return result
+
+class McpArrangeSpecifiedRequest(BaseModel):
+    canvas_id: str
+    node_ids: List[str] = []
+    token: str = ""
+
+@app.post("/api/mcp/nodes/arrange-specified")
+async def arrange_mcp_specified_nodes(payload: McpArrangeSpecifiedRequest):
+    """整理指定节点：只排列 node_ids 中的节点为整齐网格，其他节点保持不动。"""
+    from hmac import compare_digest
+    if not compare_digest(str(payload.token or ""), MCP_API_TOKEN):
+        raise HTTPException(status_code=401, detail="MCP Token 无效")
+    canvas = load_canvas(payload.canvas_id)
+    all_nodes = canvas.get("nodes") or []
+    id_set = set(payload.node_ids or [])
+    if not id_set:
+        return {"ok": True, "arranged_count": 0}
+
+    # 分离：待整理节点 vs 不动节点
+    to_arrange = [n for n in all_nodes if n.get("id") in id_set]
+    fixed = [n for n in all_nodes if n.get("id") not in id_set]
+    if not to_arrange:
+        return {"ok": True, "arranged_count": 0}
+
+    # 构建固定节点的包围盒（待整理节点不能覆盖它们）
+    boxes = _mcp_existing_boxes(fixed)
+
+    # 以固定节点群的中心偏右下方为锚点
+    if fixed:
+        fxs = [float(n.get('x') or 0) for n in fixed]
+        fys = [float(n.get('y') or 0) for n in fixed]
+        anchor_x = (min(fxs) + max(fxs)) / 2.0 + _MCP_STEP_X
+        anchor_y = (min(fys) + max(fys)) / 2.0 + _MCP_STEP_Y
+    else:
+        anchor_x, anchor_y = 200.0, 300.0
+
+    # 将待整理节点排列成网格
+    cols = min(6, len(to_arrange))
+    for i, n in enumerate(to_arrange):
+        row = i // cols
+        col = i % cols
+        px = anchor_x + col * _MCP_STEP_X
+        py = anchor_y + row * _MCP_STEP_Y
+        spot = _mcp_find_free_spot(boxes, px, py)
+        n["x"] = float(round(spot[0], 1))
+        n["y"] = float(round(spot[1], 1))
+        boxes.append((n["x"], n["y"], _MCP_BOX_W, _MCP_BOX_H))
+
+    # 合并回画布
+    canvas["nodes"] = fixed + to_arrange
+    save_canvas(canvas)
+    await manager.broadcast_mcp_nodes_updated(payload.canvas_id, to_arrange, "mcp")
+    return {"ok": True, "arranged_count": len(to_arrange)}
+
+class McpUpdatePositionsRequest(BaseModel):
+    canvas_id: str
+    nodes: List[Dict[str, Any]] = []  # [{id, x, y, ...}]
+    token: str = ""
+
+@app.post("/api/mcp/nodes/update-positions")
+async def update_mcp_node_positions(payload: McpUpdatePositionsRequest):
+    """MCP 更新节点位置/字段：直接修改指定节点的 x/y 等字段，保存并广播 mcp_nodes_updated。
+    前端收到后原地更新 DOM，不触发全量重载，不改变视口、不中断计时器。"""
+    from hmac import compare_digest
+    if not compare_digest(str(payload.token or ""), MCP_API_TOKEN):
+        raise HTTPException(status_code=401, detail="MCP Token 无效")
+    canvas = load_canvas(payload.canvas_id)
+    all_nodes = canvas.get("nodes") or []
+    update_map = {n.get("id"): n for n in (payload.nodes or []) if n.get("id")}
+    updated = []
+    for node in all_nodes:
+        if node.get("id") in update_map:
+            _mcp_deep_merge(node, update_map[node["id"]])
+            updated.append(node)
+    if not updated:
+        return {"ok": True, "updated_count": 0}
+    save_canvas(canvas)
+    await manager.broadcast_mcp_nodes_updated(payload.canvas_id, updated, "mcp")
+    return {"ok": True, "updated_count": len(updated)}
 
 class CanvasTombstoneRequest(BaseModel):
     add: List[str] = []     # 新增墓碑：这些节点已被本端删除

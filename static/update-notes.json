@@ -1,10 +1,10 @@
 {
-  "version": "1.1.21",
-  "updated_at": "2026-08-29 02:20",
+  "version": "1.1.25",
+  "updated_at": "2026-08-29 09:30",
   "items": [
     {
-      "type": "fix",
-      "text": "修复角度面板应用后提示词不显示：改用 promptInput.textContent 直接写入，绕过 loadPromptDraft 复杂逻辑链路"
+      "type": "feature",
+      "text": "MCP 新增 update_node_positions 工具：批量设置节点位置，前端原地更新不重载；轻量广播机制解决前端忽略服务端位置变更的问题"
     }
   ]
 }

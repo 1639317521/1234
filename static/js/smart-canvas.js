@@ -5790,6 +5790,36 @@ function handleCanvasUpdatedMessage(data={}){
     if(remoteUpdatedAt && remoteUpdatedAt <= Number(canvas?.updated_at || 0)) return;
     scheduleCanvasMergeReload(200);
 }
+function handleMcpNodesUpdatedMessage(data={}){
+    // MCP 轻量广播：只更新指定节点的 x/y/字段，不触发全量重载
+    if(!data || data.type !== 'mcp_nodes_updated') return;
+    if(!canvasId || data.canvas_id !== canvasId) return;
+    if(data.client_id && data.client_id === smartClientId) return;
+    const mcpNodes = data.nodes || [];
+    if(!mcpNodes.length) return;
+    for(const mcpNode of mcpNodes){
+        if(!mcpNode.id) continue;
+        let local = nodes.find(n => n.id === mcpNode.id);
+        if(local){
+            // 更新已有节点
+            const oldX = local.x, oldY = local.y;
+            Object.assign(local, mcpNode);
+            // 更新 DOM 位置
+            const el = document.querySelector(`.image-node[data-id="${CSS.escape(mcpNode.id)}"]`);
+            if(el){
+                el.style.left = `${mcpNode.x || 0}px`;
+                el.style.top = `${mcpNode.y || 0}px`;
+            }
+        } else {
+            // 新节点（batch_create 创建），追加到 nodes 数组，等待下次 render 渲染
+            nodes.push(mcpNode);
+        }
+    }
+    // 新节点加入后调度一次渲染
+    if(mcpNodes.some(n => !nodes.find(l => l.id === n.id))){
+        scheduleRender();
+    }
+}
 function startCanvasMetaPoll(){
     // WS / iframe 转发不可靠时的兜底：定期看服务器 updated_at 是否变新，变新就合并拉取
     if(canvasMetaPollTimer) return;
@@ -5824,6 +5854,7 @@ function connectAssetLibrarySyncSocket(){
                 const data = JSON.parse(event.data);
                 if(data?.type === 'asset_library_updated') handleAssetLibraryUpdatedMessage(data);
                 if(data?.type === 'canvas_updated') handleCanvasUpdatedMessage(data);
+                if(data?.type === 'mcp_nodes_updated') handleMcpNodesUpdatedMessage(data);
             } catch(e) {}
         };
         socket.onclose = () => {
@@ -19914,6 +19945,7 @@ try {
         }
         if(event.data?.type === 'asset_library_updated') handleAssetLibraryUpdatedMessage(event.data);
         if(event.data?.type === 'canvas_updated') handleCanvasUpdatedMessage(event.data);
+        if(event.data?.type === 'mcp_nodes_updated') handleMcpNodesUpdatedMessage(event.data);
     };
 } catch(e) {}
 window.addEventListener('focus', () => {
@@ -19925,6 +19957,7 @@ window.addEventListener('message', event => {
     if(event.data?.type === 'providers-changed' || event.data?.type === 'workflows-changed' || event.data?.type === 'comfy-instances-changed') refreshSmartConfigFromSettings();
     if(event.data?.type === 'asset_library_updated') handleAssetLibraryUpdatedMessage(event.data);
     if(event.data?.type === 'canvas_updated') handleCanvasUpdatedMessage(event.data);
+    if(event.data?.type === 'mcp_nodes_updated') handleMcpNodesUpdatedMessage(event.data);
     if(event.data?.type === 'studio-lang' && window.StudioI18n) {
         window.StudioI18n.set(event.data.lang || 'zh');
     }
