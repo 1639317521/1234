@@ -571,7 +571,9 @@ function smartMediaPreviewUrl(itemOrUrl, size=512){
 function smartPreviewImgHtml(itemOrUrl, size=512, attrs=''){
     const original = smartOriginalMediaUrl(itemOrUrl);
     const preview = smartMediaPreviewUrl(itemOrUrl, size);
-    return `<img src="${escapeHtml(preview)}" data-preview-src="${escapeAttr(preview)}" data-original-src="${escapeAttr(original)}"${attrs ? ` ${attrs}` : ''}>`;
+    // decoding=async：图片解码移出主线程，避免大图解码阻塞交互帧（attrs 已带 decoding 时不重复）
+    const decodingAttr = /decoding=/.test(attrs || '') ? '' : ' decoding="async"';
+    return `<img${decodingAttr} src="${escapeHtml(preview)}" data-preview-src="${escapeAttr(preview)}" data-original-src="${escapeAttr(original)}"${attrs ? ` ${attrs}` : ''}>`;
 }
 function loadSmartOriginalImageDimensions(url){
     const src = displayMediaUrl({url:smartOriginalMediaUrl(url)});
@@ -586,7 +588,8 @@ function loadSmartOriginalImageDimensions(url){
 function smartVideoPreviewHtml(itemOrUrl, size=512, attrs=''){
     const original = smartOriginalMediaUrl(itemOrUrl);
     const preview = smartMediaPreviewUrl(itemOrUrl, size);
-    return `<img src="${escapeHtml(preview)}" data-preview-src="${escapeAttr(preview)}" data-original-src="${escapeAttr(original)}" data-url="${escapeAttr(original)}" data-preview-kind="video"${attrs ? ` ${attrs}` : ''}>`;
+    const decodingAttr = /decoding=/.test(attrs || '') ? '' : ' decoding="async"';
+    return `<img${decodingAttr} src="${escapeHtml(preview)}" data-preview-src="${escapeAttr(preview)}" data-original-src="${escapeAttr(original)}" data-url="${escapeAttr(original)}" data-preview-kind="video"${attrs ? ` ${attrs}` : ''}>`;
 }
 function smartVideoFallbackHtml(url, attrs=''){
     const original = smartOriginalMediaUrl(url);
@@ -704,45 +707,86 @@ function smartNodeElementsForHighResSync(root){
 function smartViewportWantsHighRes(){
     return Number(viewport?.scale || 1) >= SMART_HIGH_RES_ZOOM_THRESHOLD;
 }
+function imageRectNearShell(rect, shellRect, margin=300){
+    // 增大边距，确保缓冲区外也会加载，滚动时不会看到低分辨率
+    return rect.right >= shellRect.left - margin && rect.left <= shellRect.right + margin
+        && rect.bottom >= shellRect.top - margin && rect.top <= shellRect.bottom + margin;
+}
 function smartImageNearViewport(img){
     if(!img?.isConnected || !shell) return false;
     const shellRect = shell.getBoundingClientRect();
     const rect = img.getBoundingClientRect();
-    // 增大边距，确保缓冲区外也会加载，滚动时不会看到低分辨率
-    const margin = 300;
-    return rect.right >= shellRect.left - margin && rect.left <= shellRect.right + margin
-        && rect.bottom >= shellRect.top - margin && rect.top <= shellRect.bottom + margin;
+    return imageRectNearShell(rect, shellRect);
 }
 // 根据当前缩放级别计算应该使用的预览尺寸
+// LOD 小图降级：scale < 0.35（缩小看全景）时用 128px 小图——此时几十个节点同时可见，
+// 每张图的光栅化/采样面积降到 384px 档的 1/9，缩小后平移/拖动明显更轻。
+// 放大回来 scale ≥ 0.35 自动升回 384/768/1536，肉眼无感（屏幕上本来就只有几十像素大）。
 function getSmartPreviewSizeForCurrentScale(){
     const scale = Number(viewport?.scale || 1);
+    if(scale < 0.35) return 128;
     if(scale < 0.5) return 384;
     if(scale < SMART_HIGH_RES_ZOOM_THRESHOLD) return 768;
     return 1536;
 }
-function calcTargetImageUrl(img, original){
+function calcTargetImageUrl(img, original, displayWidth=0){
     if(!original || original.startsWith('data:') || original.startsWith('blob:')) return original;
     if(!original.startsWith('/output/') && !original.startsWith('/assets/')) return original;
 
     const previewSize = getSmartPreviewSizeForCurrentScale();
-    // 达到最高阈值直接加载原图，不需要预览
+    // 放大档按图片实际屏幕显示宽度按需升级：显示宽度不足 1600px 时用 1536px 预览即可，
+    // 避免放大平移时 GPU 光栅化大量 2K/4K 原图导致掉帧（倒霉大师画布 10fps 的元凶）。
+    // 只有节点被拉得很大（显示宽度确实超过预览尺寸）才加载原图。
     if(previewSize >= 1536){
-        return displayMediaUrl({url:smartOriginalMediaUrl(original)});
+        if(Number(displayWidth) > 1600){
+            return displayMediaUrl({url:smartOriginalMediaUrl(original)});
+        }
+        return smartMediaPreviewUrl(original, 1536);
     }
     // 否则使用对应尺寸的预览
     return smartMediaPreviewUrl(original, previewSize);
 }
+// 最近一次画布交互（滚轮缩放/平移/拖拽）时间戳：借鉴 tldraw 的"手势冻结"策略，
+// 缩放手势进行中不批量切换图片 src（切换会引发解码+重绘风暴），停手后统一恢复。
+let _lastCanvasGestureAt = 0;
+let _interactClassTimer = 0;
+function markCanvasGesture(){
+    _lastCanvasGestureAt = performance.now();
+    // 交互期间冻结装饰性 CSS 动画（加载骨架 shimmer、连线流动、转圈等）：
+    // 这些无限动画会让所在合成层每帧重绘，与平移/缩放叠加时抢帧。静止后恢复。
+    world.classList.add('canvas-interacting');
+    if(_interactClassTimer) clearTimeout(_interactClassTimer);
+    _interactClassTimer = setTimeout(() => {
+        _interactClassTimer = 0;
+        world.classList.remove('canvas-interacting');
+    }, 180);
+}
+function canvasZoomGestureActive(){
+    return performance.now() - _lastCanvasGestureAt < 180;
+}
 function syncSmartSelectedImageResolution(root=null){
+    // 平移/拖拽交互进行中不做高清切换：避免交互期间批量换 src 引发解码+重绘风暴，
+    // 松手后由 mouseup 处再触发一次同步。
+    if(panState || dragState) return;
+    // 滚轮缩放手势进行中同样冻结，推迟到手势停止后再同步
+    if(canvasZoomGestureActive()){
+        scheduleSmartImageResolutionSync(root, 140);
+        return;
+    }
     const imagesToUpdate = [];
+    // shell 尺寸一轮只读一次，避免每张图片重复 getBoundingClientRect 触发布局计算
+    const shellRect = shell ? shell.getBoundingClientRect() : null;
     smartNodeElementsForHighResSync(root).forEach(scope => {
         scope.querySelectorAll?.('img[data-preview-src][data-original-src]').forEach(img => {
             if(img.dataset.previewKind === 'video') return;
-            // 只处理可见区域内的图片，减少加载
-            if(!smartImageNearViewport(img)) return;
+            // 只处理可见区域内的图片，减少加载（display:none 的隐藏节点宽度为 0，自然跳过）
+            const rect = img.getBoundingClientRect();
+            if(!shellRect || !rect || !rect.width) return;
+            if(!imageRectNearShell(rect, shellRect)) return;
 
             const original = img.dataset.originalSrc || '';
             const currentSrc = img.getAttribute('src') || '';
-            const targetUrl = calcTargetImageUrl(img, original);
+            const targetUrl = calcTargetImageUrl(img, original, rect.width);
 
             if(!targetUrl) return;
             if(currentSrc === targetUrl) return;
@@ -2196,10 +2240,15 @@ function arrangeSelectedSmartNodes(){
     toast('已整理选中节点');
 }
 let _minimapRenderFrame = 0;
+let _minimapLastRender = 0;
 function scheduleMinimapRender(){
     if(_minimapRenderFrame) return;
     _minimapRenderFrame = requestAnimationFrame(() => {
         _minimapRenderFrame = 0;
+        // 平移交互中，小地图 90ms 节流一次：renderMinimap 是全节点计算 + innerHTML 重建，
+        // 大画布（90+ 节点）每帧重建会拖慢平移帧率；静止/松手后会立即补一次完整渲染。
+        if(panState && performance.now() - _minimapLastRender < 90) return;
+        _minimapLastRender = performance.now();
         renderMinimap();
     });
 }
@@ -2212,8 +2261,15 @@ function applyViewport(){
     world.classList.toggle('canvas-scaled', Math.abs(viewport.scale - 1) > 0.001);
     shell.style.backgroundSize = '24px 24px';
     shell.style.backgroundPosition = '0 0';
-    // 更新可见区域标记（带缓冲区），拖拽和滚屏时只渲染可见+缓冲区的节点
-    scheduleViewportCullingUpdate();
+    // 交互手势（滚轮缩放/平移）进行中推迟视口裁剪：缩放中执行 culling 会让几十个节点反复
+    // display:none↔'' 进出渲染树，每次都触发全量重排+重光栅化（单次滚轮 150ms+ longtask，
+    // 连续滚轮直接掉到 10fps）；平移中裁剪虽有缓冲区，缩小状态缓冲区内几十个节点时
+    // 每次遍历+状态切换也有可观成本。手势停止后（markCanvasGesture 180ms 判定）再裁剪。
+    if(canvasZoomGestureActive() || panState){
+        scheduleViewportCullingUpdate(200);
+    } else {
+        scheduleViewportCullingUpdate();
+    }
     // 小地图包含全节点计算和 innerHTML 重建，合并到每个动画帧最多执行一次。
     scheduleMinimapRender();
     scheduleSmartImageResolutionSync(world, 120);
@@ -2225,9 +2281,11 @@ function getVisibleViewportBoundsWithMargin(){
     const rect = shell.getBoundingClientRect();
     // 自适应缓冲区：scale越大（放大越多），缓冲区比例越小，减少可见节点数量
     // 节点超过 60 个时进一步缩小缓冲区，降低大画布拖拽负载
+    // 上限 1.2：缩小时 0.5/scale 会暴涨（scale=0.1 → 5 倍屏缓冲），导致几十个节点
+    // 全部保持渲染，缩小后平移/拖动时光栅化面积过大掉帧
     const nodeCount = nodes?.length || 0;
     const densityFactor = nodeCount > 60 ? 0.6 : 1.0;
-    const marginRatio = Math.max(0.2, 0.5 / viewport.scale) * densityFactor;
+    const marginRatio = Math.max(0.2, Math.min(0.5 / viewport.scale, 1.2)) * densityFactor;
     const marginX = rect.width * marginRatio;
     const marginY = rect.height * marginRatio;
     // 屏幕坐标 → 世界坐标转换
@@ -2259,7 +2317,7 @@ function rebuildSpatialGrid(){
 }
 
 let _viewportCullingTimeout = null;
-function scheduleViewportCullingUpdate(){
+function scheduleViewportCullingUpdate(delay=10){
     _nodeVisBounds = null; // 重置缓存，确保新节点也会被检查
     // 防抖节流：短时间内多次调用只执行一次，避免滚动/缩放时频繁触发遍历
     if(_viewportCullingTimeout){
@@ -2270,7 +2328,7 @@ function scheduleViewportCullingUpdate(){
         requestAnimationFrame(() => {
             updateViewportCulling();
         });
-    }, 10); // 10ms 防抖，合并密集调用
+    }, delay);
 }
 // 缓存 DOM 元素引用，避免每次遍历 80+ 节点都 querySelector
 let _nodeElCache = null;
@@ -6497,7 +6555,10 @@ function createNode(x, y, images=[], options={}){
     if(!options.skipUndo) pushUndo();
     const nodeImages = (images || []).map(img => ({...img}));
     const nodeTitle = nodeImages.length > 1 ? 'Group' : nodeImages.length ? 'Image' : tr('smart.createImportNode');
-    const node = {id:uid('smart'), type:'smart-image', x, y, title:nodeTitle, displayTitle:nodeTitle, images:nodeImages, created_at:Date.now()};
+    // options.title 显式指定节点标题（如资产库素材名）；多图节点仍用默认 Group
+    const explicitTitle = nodeImages.length > 1 ? '' : String(options.title || '').trim();
+    const finalTitle = explicitTitle || nodeTitle;
+    const node = {id:uid('smart'), type:'smart-image', x, y, title:finalTitle, displayTitle:finalTitle, images:nodeImages, created_at:Date.now()};
     node.scale = nodeImages.length > 1 ? MEDIA_GROUP_DEFAULT_SCALE : mediaNodeDefaultScale(node);
     inheritNodeMetaFromImage(node);
     nodes.push(node);
@@ -6712,7 +6773,8 @@ function pasteAssetsFromInbox(){
     items.forEach((it, i) => {
         const r = Math.floor(i / cols), c = i % cols;
         const p = {x: startX + c * cell, y: startY + r * cell};
-        const node = createImageNodeAt(p, [assetNodeImageFromItem(it)], {skipUndo:true, select:false});
+        // 节点标题跟随素材名（去掉扩展名）
+        const node = createImageNodeAt(p, [assetNodeImageFromItem(it)], {skipUndo:true, select:false, title:String(it?.name || '').trim().replace(/\.[^./\\]+$/, '')});
         if(node) created.push(node.id);
     });
     selectedId = created.length === 1 ? created[0] : '';
@@ -6776,10 +6838,21 @@ function shellPoint(event){
     return {x:event.clientX - rect.left, y:event.clientY - rect.top};
 }
 function renderConnections(){
-    const conns = (canvas?.connections || []).map((conn, index) => ({...conn, index})).filter(c => nodes.some(n => n.id === c.from) && nodes.some(n => n.id === c.to));
-    const cascadeKeys = cascadeConnectionKeys();
     const activeCascadeCount = (smartCascadeRunPath?.states && Object.values(smartCascadeRunPath.states).filter(state => state && state !== 'done').length) || 0;
     const reduceMotion = activeCascadeCount > 24;
+    const geos = computeConnectionItems();
+    const paths = geos.map(geo => geo ? `<path class="${geo.cls} conn-line" data-conn-index="${geo.dataIndex}" d="${geo.curve}" stroke="${geo.color}" stroke-width="${geo.width}" fill="none" opacity="${geo.opacity}"></path><path class="conn-hit" data-conn-index="${geo.dataIndex}" d="${geo.curve}" stroke="transparent" stroke-width="14" fill="none"></path><circle class="conn-end" data-conn-index="${geo.dataIndex}" cx="${geo.tx}" cy="${geo.ty}" r="3.5" fill="${geo.color}" opacity=".66"></circle><g class="conn-cut" data-conn-index="${geo.dataIndex}" transform="translate(${geo.mx} ${geo.my})"><circle r="8" fill="var(--card)" stroke="${geo.color}" stroke-width="1.4"></circle><path d="M-3 -3 L3 3 M3 -3 L-3 3" stroke="${geo.color}" stroke-width="1.5" stroke-linecap="round"></path></g>` : '').join('');
+    // 固定 6000x4000：曾试过按连线内容包围盒收缩 SVG 尺寸（1.1.40），但本项目画布坐标极端
+    // （节点可分布在几十万像素的负坐标区），收缩后的 SVG 元素尺寸/偏移超出浏览器元素与
+    // 纹理上限，渲染直接错乱。连线层的 GPU 成本优化需走 Canvas 化方案（见改动记录 33）。
+    return `<svg class="connection-layer ${reduceMotion ? 'conn-reduce-motion' : ''}" width="6000" height="4000" viewBox="0 0 6000 4000" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+}
+// 连线几何计算（renderConnections 全量渲染与拖拽期快速更新共用）：
+// 含连线合并逻辑，返回与合并后连线一一对应的几何信息数组（无效连线为 null）。
+// 借鉴 litegraph/ComfyUI 的增量重绘思路：拖拽时连线元素不重建，只更新 d/cx/cy/transform。
+function computeConnectionItems(){
+    const conns = (canvas?.connections || []).map((conn, index) => ({...conn, index})).filter(c => nodes.some(n => n.id === c.from) && nodes.some(n => n.id === c.to));
+    const cascadeKeys = cascadeConnectionKeys();
     const selectedConnIds = new Set(selectedNodeIds());
     // 合并连线：同一来源连到同一分组的多个成员，合成一条到分组的连线（A→A1/A2/A3 显示为 A→分组），
     // 减少“每张图都拖一条线”的杂乱。history 连线不合并。
@@ -6803,10 +6876,10 @@ function renderConnections(){
             items.push({merged:false, from:conn.from, toId:conn.to, kind, indices:[conn.index], targets:[conn.to]});
         }
     });
-    const paths = items.map(item => {
+    return items.map(item => {
         const fromNode = nodes.find(n => n.id === item.from);
         const toNode = nodes.find(n => n.id === item.toId);
-        if(!fromNode || !toNode) return '';
+        if(!fromNode || !toNode) return null;
         const fr = nodeRect(fromNode), tr = nodeRect(toNode);
         const kind = item.kind;
         const isHistory = kind === 'history';
@@ -6843,9 +6916,63 @@ function renderConnections(){
         const color = isCascade ? '#16a34a' : isHistory ? 'rgba(100,116,139,0.46)' : kind === 'input' ? 'rgba(100,116,139,0.62)' : 'rgba(148,163,184,0.62)';
         const opacity = isPendingLine ? '.82' : '1';
         const width = kind === 'input' ? '1.9' : '1.6';
-        return `<path class="${cls} conn-line" data-conn-index="${dataIndex}" d="${curve}" stroke="${color}" stroke-width="${width}" fill="none" opacity="${opacity}"></path><path class="conn-hit" data-conn-index="${dataIndex}" d="${curve}" stroke="transparent" stroke-width="14" fill="none"></path><circle class="conn-end" data-conn-index="${dataIndex}" cx="${tx}" cy="${ty}" r="3.5" fill="${color}" opacity=".66"></circle><g class="conn-cut" data-conn-index="${dataIndex}" transform="translate(${mx} ${my})"><circle r="8" fill="var(--card)" stroke="${color}" stroke-width="1.4"></circle><path d="M-3 -3 L3 3 M3 -3 L-3 3" stroke="${color}" stroke-width="1.5" stroke-linecap="round"></path></g>`;
-    }).join('');
-    return `<svg class="connection-layer ${reduceMotion ? 'conn-reduce-motion' : ''}" width="6000" height="4000" viewBox="0 0 6000 4000" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+        return {dataIndex, curve, tx, ty, mx, my, cls, color, opacity, width};
+    });
+}
+// 拖拽/缩放期间连线快速更新：不重建 SVG DOM、不重绑事件，只改现有元素的几何属性。
+// 与全量 refreshConnectionLayer 相比省掉了 innerHTML 解析、数百元素销毁重建和事件重绑。
+// involvedIds（可选）：本次发生位移的节点 id 集合。提供时只更新与这些节点相连的连线——
+// 其余连线两端都没动，d/cx/cy 不变，跳过 setAttribute 可避免整个连线层重绘。
+// 缩小状态下所有连线都在视口内（几百条全可见），全量更新会整层重绘导致掉帧，按需更新是关键。
+function fastUpdateConnectionGeometries(involvedIds=null){
+    const svg = world.querySelector('svg.connection-layer');
+    if(!svg) return false;
+    const geos = computeConnectionItems();
+    // 按需过滤：只保留与被拖节点相连的连线（合并连线的 dataIndex 是逗号分隔的索引串，
+    // 任一索引命中即算涉及）。其余连线两端都没动，跳过 setAttribute 避免整层重绘。
+    let targetGeos = geos;
+    if(involvedIds && involvedIds.size){
+        const scopes = new Set();
+        involvedIds.forEach(id => {
+            scopes.add(id);
+            const scope = smartGroupScopeId(id);
+            if(scope) scopes.add(scope);
+        });
+        const conns = (canvas?.connections || []);
+        const involved = conn => scopes.has(conn.from) || scopes.has(conn.to)
+            || scopes.has(smartGroupScopeId(conn.from)) || scopes.has(smartGroupScopeId(conn.to));
+        targetGeos = geos.filter(geo => {
+            if(!geo) return false;
+            return String(geo.dataIndex).split(',').some(idx => {
+                const conn = conns[Number(idx)];
+                return conn && involved(conn);
+            });
+        });
+    }
+    const byKey = new Map();
+    svg.querySelectorAll('[data-conn-index]').forEach(el => {
+        const key = el.getAttribute('data-conn-index') || '';
+        let arr = byKey.get(key);
+        if(!arr){ arr = []; byKey.set(key, arr); }
+        arr.push(el);
+    });
+    targetGeos.forEach(geo => {
+        if(!geo) return;
+        const els = byKey.get(geo.dataIndex);
+        if(!els) return;
+        els.forEach(el => {
+            const cn = el.classList;
+            if(cn.contains('conn-line') || cn.contains('conn-hit')){
+                el.setAttribute('d', geo.curve);
+            } else if(cn.contains('conn-end')){
+                el.setAttribute('cx', String(geo.tx));
+                el.setAttribute('cy', String(geo.ty));
+            } else if(cn.contains('conn-cut')){
+                el.setAttribute('transform', `translate(${geo.mx} ${geo.my})`);
+            }
+        });
+    });
+    return true;
 }
 function refreshConnectionLayer(){
     connectionLayerRaf = 0;
@@ -6862,14 +6989,23 @@ function scheduleConnectionLayerRefresh(){
     connectionLayerRaf = requestAnimationFrame(refreshConnectionLayer);
 }
 let interactionLayerRaf = 0;
-// 拖动/缩放节点时，每个 mousemove 都全量重建连线 SVG + 小地图会掉帧；
-// 用 requestAnimationFrame 把它们合并成每帧最多刷新一次（节点本身的位移仍是即时的）。
+// 拖动/缩放节点时不再全量重建连线 SVG + 小地图（litegraph 式增量更新）：
+// - 连线只更新现有元素的几何属性（d/cx/cy/transform），不重建 DOM、不重绑事件
+// - 拖动节点时只更新与被拖节点相连的连线（缩小状态几百条线全可见，全量更新会整层重绘）
+// - 小地图 90ms 节流（与平移一致），松手后由 mouseup 的全量刷新兜底恢复
 function scheduleInteractionLayerRefresh(){
     if(interactionLayerRaf) return;
     interactionLayerRaf = requestAnimationFrame(() => {
         interactionLayerRaf = 0;
-        refreshConnectionLayer();
-        renderMinimap();
+        let involvedIds = null;
+        if(dragState){
+            involvedIds = new Set((dragState.group || [{id:dragState.id}]).map(item => item.id));
+        }
+        if(!fastUpdateConnectionGeometries(involvedIds)) refreshConnectionLayer();
+        if(!dragState || performance.now() - _minimapLastRender >= 90){
+            _minimapLastRender = performance.now();
+            renderMinimap();
+        }
     });
 }
 function moveNodeElementsDuringDrag(){
@@ -10837,35 +10973,9 @@ function deleteNode(id){
     render();
     scheduleSave();
 }
-function clearNodeMediaBeforeDelete(id){
-    const node = nodes.find(n => n.id === id);
-    if(!node || (node.type && node.type !== 'smart-image')) return false;
-    const hadMedia = Boolean((node.images || []).length || node.pending);
-    if(!hadMedia) return false;
-    pushUndo();
-    node.images = [];
-    node.pending = 0;
-    node.running = false;
-    node.title = tr('smart.createImportNode');
-    node.displayTitle = node.title;
-    delete node.w;
-    delete node.h;
-    const history = historyGroupForNode(node);
-    if(history){
-        deletedSmartNodeIds.add(history.id);
-        reportSmartTombstones([history.id], []);
-        nodes = nodes.filter(n => n.id !== history.id);
-        if(canvas) canvas.connections = (canvas.connections || []).filter(c => c.from !== history.id && c.to !== history.id);
-    }
-    if(selectedImage.nodeId === id) selectedImage = {nodeId:'', index:-1};
-    selectedId = id;
-    selectedIds = [];
-    render();
-    scheduleSave();
-    return true;
-}
 function deleteNodeFromButton(id){
-    if(clearNodeMediaBeforeDelete(id)) return;
+    // 一键删除整个节点：不再先清空内容再删第二步。
+    // 节点内单张图片的删除走图片右上角的红色删除键，两处职责分开。
     deleteNode(id);
 }
 function disconnectConnection(index){
@@ -18804,6 +18914,7 @@ window.onmousemove = e => {
         if(Math.abs(dx) + Math.abs(dy) > 3) didPan = true;
         panState.nextX = panState.ox + dx;
         panState.nextY = panState.oy + dy;
+        markCanvasGesture(); // 平移手势中：冻结高清切换与装饰动画
         if(!panState.frame){
             panState.frame = requestAnimationFrame(() => {
                 if(!panState) return;
@@ -18844,6 +18955,7 @@ window.onmousemove = e => {
         : null;
     const target = isSmartGroupNode(rawTarget) ? null : rawTarget;
     setDropHighlight(target?.id || '');
+    markCanvasGesture(); // 拖拽手势中：冻结高清切换与装饰动画
     scheduleDragRender();
     updateLoopInsertPreview();
     if(target) setDropHighlight(target.id);
@@ -18930,6 +19042,11 @@ window.onmouseup = e => {
         shell.classList.remove('panning');
         scheduleSave();
         setTimeout(() => { didPan = false; }, 0);
+        // 平移期间暂停了高清切换和视口裁剪，松手后统一补一次
+        scheduleSmartImageResolutionSync(world, 120);
+        scheduleViewportCullingUpdate();
+        // 小地图平移期间被节流，松手后立即补一次完整渲染
+        renderMinimap();
     }
     if(smartMinimapDrag){
         smartMinimapDrag = false;
@@ -18939,9 +19056,28 @@ window.onmouseup = e => {
         let stateChanged = false;
         const hit = document.elementFromPoint(e.clientX, e.clientY);
         const droppedOnAssetPanel = assetLibraryOpen && hit && assetPanel?.contains(hit);
-        if(droppedOnAssetPanel && draggedNode && (draggedNode.images || []).length){
-            const imagesToSave = (draggedNode.images || []).filter(img => img?.url);
-            imagesToSave.forEach(img => addUrlToAssetLibrary(img.url, img.name || draggedNode.title || 'image'));
+        if(droppedOnAssetPanel && draggedNode){
+            // 框选多节点拖入资产库：保存所有被拖节点（dragState.group）。
+            // 注意判定条件是"任一被拖节点有图"而不是主拖动节点有图——
+            // 框选时鼠标按住的可能是提示词/空节点，不能因此拦掉全部保存。
+            console.warn('[asset-drop-debug] dragState.group size:', (dragState.group||[]).length, 'ids:', JSON.stringify((dragState.group||[]).map(i=>i.id)), 'selectedIds:', JSON.stringify(selectedIds));
+            const droppedNodes = (dragState.group || [{id:dragState.id}])
+                .map(item => nodes.find(n => n?.id === item.id))
+                .filter(n => n && (n.images || []).some(img => img?.url));
+            if(droppedNodes.length){
+            droppedNodes.forEach(node => {
+                const imagesToSave = (node.images || []).filter(img => img?.url);
+                // 拖入资产库按节点标题命名（只认用户自定义标题，默认的 Image/Group 不算）；
+                // 多图节点加序号后缀区分，无自定义标题时回退原文件名
+                const baseName = String(smartNodeDisplayTitle(node) || '').trim();
+                imagesToSave.forEach((img, idx) => {
+                    const name = baseName
+                        ? (imagesToSave.length > 1 ? `${baseName} ${idx + 1}` : baseName)
+                        : (img.name || 'image');
+                    addUrlToAssetLibrary(img.url, name);
+                });
+            });
+            }
             (dragState.group || [{id:dragState.id, ox:dragState.ox, oy:dragState.oy}]).forEach(item => {
                 const n = nodes.find(x => x.id === item.id);
                 if(n){ n.x = item.ox; n.y = item.oy; }
@@ -19066,6 +19202,8 @@ window.onmouseup = e => {
         dragState = null;
         scheduleSave();
         scheduleConnectionLayerRefresh();
+        // 拖拽期间暂停了高清切换，松手后统一补一次
+        scheduleSmartImageResolutionSync(world, 120);
     }
 };
 shell.addEventListener('wheel', e => {
@@ -19076,6 +19214,7 @@ shell.addEventListener('wheel', e => {
     const sy = e.clientY - rect.top;
     const before = {x:(sx - viewport.x) / viewport.scale, y:(sy - viewport.y) / viewport.scale};
     const factor = Math.exp(-e.deltaY * 0.001);
+    markCanvasGesture(); // 缩放手势进行中，冻结高清图片切换
     viewport.scale = safeScale(viewport.scale * factor);
     viewport.x = sx - before.x * viewport.scale;
     viewport.y = sy - before.y * viewport.scale;
@@ -19109,7 +19248,12 @@ shell.ondrop = async e => {
             const asset = JSON.parse(assetRaw);
             if(asset?.url) {
                 pushUndo();
-                createImageNodeAt(p, [assetNodeImageFromItem(asset)], {skipUndo:true});
+                // 节点标题跟随资产库素材名（去掉扩展名），保持画布节点与资产库一致。
+                // 必须在 createImageNodeAt 之前把标题算好，经 options.title 传入——
+                // createImageNodeAt 内部会 render()，之后再改 node.title 界面不会更新
+                // （render 已用旧标题建好 DOM），也没有触发持久化保存。
+                const assetName = String(asset.name || '').trim().replace(/\.[^./\\]+$/, '');
+                createImageNodeAt(p, [assetNodeImageFromItem(asset)], {skipUndo:true, title:assetName});
             }
             return;
         } catch {}

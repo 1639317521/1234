@@ -1,10 +1,10 @@
 {
-  "version": "1.1.28",
-  "updated_at": "2026-08-29 10:40",
+  "version": "1.1.43",
+  "updated_at": "2026-08-30 01:35",
   "items": [
     {
-      "type": "optimization",
-      "text": "优化大画布拖拽性能：空间网格不在 render 中重建，content-visibility:auto 跳过离屏渲染，节点密集时缩小视口缓冲区"
+      "type": "fix",
+      "text": "确保资产库素材拖到画布按素材名命名的修复真正生效：此前 1.1.42 的修复改在创建节点时直接传入标题（创建后再改 title 不会更新已渲染的界面），本次核对了从 dragstart 到 createNode 的完整链路确认逻辑正确，并更新了 smart-canvas.html 的脚本版本号强制浏览器加载新代码（iframe 画布普通刷新可能继续用旧缓存导致修复看起来无效）"
     }
   ]
 }

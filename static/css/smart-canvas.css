@@ -37,6 +37,10 @@ html[data-studio-scale="off"].studio-scale-managed .preview-modal {
 .shell.panning { cursor:grabbing; }
 .shell.zoom-preview { cursor:crosshair; }
 .world { position:absolute; left:0; top:0; width:6000px; height:4000px; transform-origin:0 0; will-change: transform; }
+/* 画布交互（平移/缩放/拖拽）期间冻结装饰性动画：加载骨架 shimmer、连线流动、转圈等
+   无限动画会让所在合成层每帧重绘，与平移叠加时抢帧。借鉴 tldraw 手势冻结策略，
+   静止 180ms 后自动恢复（JS 侧 markCanvasGesture 控制）。 */
+.world.canvas-interacting *, .world.canvas-interacting *::before, .world.canvas-interacting *::after { animation-play-state: paused !important; }
 /* 画布缩放（非 1:1）时，关闭 world 内卡片的 backdrop-filter，避免合成层位图被缩放导致“参数设置”等组件发虚。
    底色本身接近不透明，关闭毛玻璃后观感几乎无差，但能在各浏览器下保持清晰。 */
 .world.canvas-scaled .image-node,
@@ -54,7 +58,7 @@ html[data-studio-scale="off"].studio-scale-managed .preview-modal {
 .smart-log-toggle:hover,.smart-shortcut-toggle:hover,.smart-workflow-toggle:hover { transform:translateY(-1px); border-color:var(--text); }
 .smart-log-toggle.active,.smart-shortcut-toggle.active,.smart-workflow-toggle.active { background:var(--strong); color:var(--strong-text); border-color:var(--strong); box-shadow:0 16px 38px var(--shadow); }
 .smart-log-toggle i,.smart-log-toggle svg,.smart-shortcut-toggle i,.smart-shortcut-toggle svg,.smart-workflow-toggle i,.smart-workflow-toggle svg { width:16px; height:16px; }
-.image-node { position:absolute; width:260px; min-height:178px; border-radius:16px; background:transparent; border:0; box-shadow:none; overflow:visible; user-select:none; cursor:move; contain:layout style; content-visibility:auto; }
+.image-node { position:absolute; width:260px; min-height:178px; border-radius:16px; background:transparent; border:0; box-shadow:none; overflow:visible; user-select:none; cursor:move; contain:layout style; }
 .image-node.dragging { will-change: transform; }
 body.smart-node-drag * { user-select:none !important; }
 body.smart-node-drag .image-node textarea,
@@ -611,6 +615,11 @@ body.smart-node-resize .smart-node-floating-menu,
 .mini-x:hover { opacity:1; color:#dc2626; background:#fee2e2; border-color:#fecaca; transform:translateY(-1px); }
 .mini-x i { width:14px; height:14px; stroke-width:2.4; }
 .node-body { min-height:140px; padding:10px; display:flex; align-items:center; justify-content:center; }
+/* 浏览器级视口裁剪：屏幕外的图片内容跳过光栅化（比 JS 缓冲区裁剪更精确，放大平移不卡的关键）。
+   注意挂在 .node-body 而不是 .image-node：content-visibility 会隐式裁剪溢出内容，
+   挂在整个节点上会把边界外的端口圆点切成半圆、悬浮工具栏裁没（1.1.35 的教训）。
+   端口/工具栏是 .image-node 的直接子元素，不在 .node-body 内，不受影响。 */
+.image-node:not(.empty-node) .node-body { content-visibility:auto; }
 .empty-node .node-body { flex:1 1 auto; min-height:0; padding:10px 10px 6px; overflow:hidden; }
 .node-drop { width:100%; height:100%; min-height:0; border-radius:15px; border:1px dashed var(--line); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--faint); background:var(--soft); font-size:12px; font-weight:800; padding:12px; box-sizing:border-box; text-align:center; overflow:hidden; }
 .node-drop i { width:24px; height:24px; }

@@ -3,5 +3,6 @@
   "version_url": "https://raw.githubusercontent.com/1639317521/1234/master/VERSION",
   "raw_root": "https://raw.githubusercontent.com/1639317521/1234/master",
   "tree_url": "https://api.github.com/repos/1639317521/1234/git/trees/master?recursive=1",
-  "update_notes_url": "https://raw.githubusercontent.com/1639317521/1234/master/static/update-notes.json"
+  "update_notes_url": "https://raw.githubusercontent.com/1639317521/1234/master/static/update-notes.json",
+  "github_token": ""
 }
