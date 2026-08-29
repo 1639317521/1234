@@ -9,7 +9,7 @@ const createMenu = document.getElementById('createMenu');
 const promptInput = document.getElementById('promptInput');
 const mentionPicker = document.getElementById('mentionPicker');
 const mentionPreview = document.getElementById('mentionPreview');
-const engineSelect = document.getElementById('engineSelect');
+let engineSelect = document.getElementById('engineSelect');
 const engineQuickToggle = document.getElementById('engineQuickToggle');
 let dynamicParams = document.getElementById('dynamicParams');
 const runBtn = document.getElementById('runBtn');
@@ -9419,9 +9419,10 @@ function openBatchSmartSettings(){
     const ids = selectedNodeIds();
     const targets = ids.map(id => nodes.find(n => n.id === id)).filter(Boolean);
     if(targets.length < 2) return;
-    // 保存当前 settings 和 dynamicParams，Dialog 内替换
+    // 保存当前引用
     const savedSettings = cloneSmartSettings(settings);
     const savedDynamicParams = dynamicParams;
+    const savedEngineSelect = engineSelect;
     // 用第一个节点的设置初始化 Dialog
     const firstNode = targets[0];
     const nodeSettings = smartSettingsForNode(firstNode);
@@ -9431,7 +9432,18 @@ function openBatchSmartSettings(){
     overlay.className = 'smart-batch-settings-overlay';
     overlay.innerHTML = `<div class="smart-batch-settings-dialog">
         <div class="smart-batch-settings-head"><span>批量设置（${targets.length} 个节点）</span><button type="button" class="smart-batch-settings-close" data-action="close"><i data-lucide="x"></i></button></div>
-        <div class="smart-batch-settings-body" id="batchSettingsBody"></div>
+        <div class="smart-batch-settings-body" id="batchSettingsBody">
+            <div class="batch-engine-row">
+                <select id="batchEngineSelect" class="engine-select">
+                    <option value="api">API生成</option>
+                    <option value="volcengine">火山引擎</option>
+                    <option value="modelscope">MS生成</option>
+                    <option value="runninghub">RunningHub</option>
+                    <option value="comfy">ComfyUI</option>
+                </select>
+            </div>
+            <div id="batchDynamicParams"></div>
+        </div>
         <div class="smart-batch-settings-hint">仅修改设置，不改变提示词、连线、位置或标题</div>
         <div class="smart-batch-settings-foot">
             <button type="button" class="batch-btn" data-action="cancel">取消</button>
@@ -9439,13 +9451,22 @@ function openBatchSmartSettings(){
         </div>
     </div>`;
     document.body.appendChild(overlay);
-    // 替换 dynamicParams 为 Dialog 容器，渲染设置控件
-    dynamicParams = overlay.querySelector('#batchSettingsBody');
+    // 替换全局引用，渲染设置控件
+    const batchEngineSel = overlay.querySelector('#batchEngineSelect');
+    dynamicParams = overlay.querySelector('#batchDynamicParams');
+    engineSelect = batchEngineSel;
+    batchEngineSel.value = settings.engine;
     renderDynamicParams();
-    // 绑定按钮事件
+    // 引擎切换时重新渲染
+    batchEngineSel.onchange = () => {
+        settings.engine = batchEngineSel.value;
+        renderDynamicParams();
+    };
+    // 关闭清理
     const cleanup = () => {
         overlay.remove();
         dynamicParams = savedDynamicParams;
+        engineSelect = savedEngineSelect;
         Object.assign(settings, savedSettings);
         renderDynamicParams();
     };
