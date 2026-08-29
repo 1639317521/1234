@@ -1775,11 +1775,14 @@ input[type=range].smart-range::-webkit-slider-thumb { -webkit-appearance:none; w
     border:1px solid var(--line); background:var(--card); color:var(--text);
     font-size:13px; font-weight:600; cursor:pointer;
 }
-/* 批量设置弹窗内控件紧凑 */
-.smart-batch-settings-body .smart-control { margin-bottom:6px; }
-.smart-batch-settings-body .smart-pill { height:28px; max-width:110px; font-size:11px; }
+/* 批量设置弹窗内控件水平排列 + 紧凑 */
+.smart-batch-settings-body .batch-engine-row { width:100%; }
+.smart-batch-settings-body #batchDynamicParams { display:flex; flex-wrap:wrap; gap:6px; align-items:flex-start; width:100%; }
+.smart-batch-settings-body .smart-control { margin:0; flex:0 0 auto; min-width:0; }
+.smart-batch-settings-body .smart-pill { height:24px; max-width:90px; font-size:9px; padding:0 8px; }
+.smart-batch-settings-body .smart-pill span { font-size:9px; }
 .smart-batch-settings-body .smart-pill i,
-.smart-batch-settings-body .smart-pill svg { width:12px !important; height:12px !important; }
-.smart-batch-settings-body .size-picker-row { gap:4px; }
-.smart-batch-settings-body .size-picker-row .smart-pill { max-width:72px; font-size:10px; }
-.smart-batch-settings-body .smart-control-label { font-size:10px; }
+.smart-batch-settings-body .smart-pill svg { width:10px !important; height:10px !important; }
+.smart-batch-settings-body .size-picker-row { gap:2px; }
+.smart-batch-settings-body .size-picker-row .smart-pill { max-width:52px; font-size:8px; height:22px; padding:0 5px; }
+.smart-batch-settings-body .smart-control-label { font-size:8px; }
