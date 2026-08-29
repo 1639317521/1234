@@ -1,10 +1,10 @@
 {
-  "version": "1.1.27",
-  "updated_at": "2026-08-29 10:10",
+  "version": "1.1.28",
+  "updated_at": "2026-08-29 10:40",
   "items": [
     {
-      "type": "fix",
-      "text": "修复批量设置弹窗不显示选项：dynamicParams 改为 let 避免 const 重新赋值报错"
+      "type": "optimization",
+      "text": "优化大画布拖拽性能：空间网格不在 render 中重建，content-visibility:auto 跳过离屏渲染，节点密集时缩小视口缓冲区"
     }
   ]
 }

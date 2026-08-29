@@ -2224,7 +2224,10 @@ function applyViewport(){
 function getVisibleViewportBoundsWithMargin(){
     const rect = shell.getBoundingClientRect();
     // 自适应缓冲区：scale越大（放大越多），缓冲区比例越小，减少可见节点数量
-    const marginRatio = Math.max(0.2, 0.5 / viewport.scale);
+    // 节点超过 60 个时进一步缩小缓冲区，降低大画布拖拽负载
+    const nodeCount = nodes?.length || 0;
+    const densityFactor = nodeCount > 60 ? 0.6 : 1.0;
+    const marginRatio = Math.max(0.2, 0.5 / viewport.scale) * densityFactor;
     const marginX = rect.width * marginRatio;
     const marginY = rect.height * marginRatio;
     // 屏幕坐标 → 世界坐标转换
@@ -8950,7 +8953,8 @@ function render(){
     refreshRunTimerPills();
     // 初次渲染后更新一次视口可见性，隐藏视口外节点
     _nodeElCache = null; // 旧 DOM 已被重建，清除缓存
-    _spatialGrid = null; // 节点已重建，清除空间网格索引
+    // 不在 render 中重置空间网格（render 频繁调用，但节点位置通常不变）
+    // 空间网格在节点实际移动后重建（拖拽结束、增删节点）
     scheduleViewportCullingUpdate();
 }
 function measureSmartNodeImages(){
